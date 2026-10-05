@@ -20,6 +20,8 @@ button { cursor: pointer; }
 .app-shell { width: min(100% - 48px, 1000px); margin: 0 auto; }
 
 .topbar { height: 80px; display: flex; align-items: center; justify-content: space-between; }
+.topbar-actions { display: flex; align-items: center; gap: 18px; }
+.booklist-link { text-decoration: none; }
 .brand { display: inline-flex; align-items: center; gap: 10px; color: #25243a; font-size: 16px; font-weight: 500; text-decoration: none; }
 .brand strong { font-weight: 800; }
 .brand-mark { display: grid; width: 34px; height: 34px; place-items: center; border-radius: 11px; background: #7568dd; color: white; font-size: 22px; }
@@ -235,6 +237,9 @@ button { cursor: pointer; }
 }
 
 @media (max-width: 390px) {
+  .topbar-actions { gap: 8px; }
+  .topbar-note { font-size: 0; }
+  .booklist-link { min-height: 34px; padding: 0 9px; font-size: 10px; }
   .welcome { padding-right: 13px; padding-left: 16px; }
   .welcome h1 { font-size: 22px; }
   .welcome-description { max-width: 225px; }
