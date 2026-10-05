@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f7f7fb" />
+    <title>오늘의 독서 기록</title>
+    <link rel="stylesheet" href="booklist.css" />
+  </head>
+  <body>
+    <main class="page-shell">
+      <header class="topbar">
+        <a class="brand" href="../" aria-label="반짝반짝 할 일표 홈">
+          <span class="brand-mark" aria-hidden="true">✳</span>
+          <span>우리 가족 <strong>독서 기록</strong></span>
+        </a>
+        <a class="home-link" href="../">할 일표로 돌아가기</a>
+      </header>
+
+      <section class="intro-card">
+        <div>
+          <p class="eyebrow">A LITTLE READING EVERY DAY</p>
+          <h1>오늘 읽은 책을<br /><span>차곡차곡 기록해요.</span></h1>
+          <p class="intro-copy">자녀와 날짜를 선택하고, 읽은 책 제목과 페이지 범위를 남겨 보세요.</p>
+        </div>
+        <div class="book-art" aria-hidden="true">📚</div>
+      </section>
+
+      <section class="reading-panel" aria-labelledby="reading-heading">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">DAILY READING LOG</p>
+            <h2 id="reading-heading">하루 독서 기록</h2>
+          </div>
+          <p id="daily-summary" class="daily-summary" aria-live="polite"></p>
+        </div>
+
+        <div class="filters">
+          <label class="field-label" for="child-select">자녀</label>
+          <select id="child-select" class="control-input" aria-label="자녀 선택"></select>
+          <label class="field-label date-label" for="reading-date">날짜</label>
+          <input id="reading-date" class="control-input date-input" type="date" required />
+        </div>
+
+        <div class="access-panel">
+          <p id="access-status" class="access-status">기록을 추가하거나 수정하려면 자녀 PIN을 입력해 주세요.</p>
+          <div class="access-actions">
+            <button id="unlock-button" class="button button-soft" type="button">PIN 입력</button>
+            <button id="lock-button" class="button button-soft" type="button" hidden>잠금</button>
+          </div>
+        </div>
+
+        <form id="reading-form" class="reading-form">
+          <div class="form-title-row">
+            <h3 id="form-heading">읽은 책 추가</h3>
+            <button id="cancel-edit" class="text-button" type="button" hidden>수정 취소</button>
+          </div>
+          <label class="field-label" for="book-title">책 제목</label>
+          <input id="book-title" class="control-input" type="text" maxlength="200" placeholder="예: 마당을 나온 암탉" required disabled />
+          <div class="page-fields">
+            <div>
+              <label class="field-label" for="page-from">시작 페이지</label>
+              <input id="page-from" class="control-input" type="number" min="1" max="100000" placeholder="1" required disabled />
+            </div>
+            <span class="page-separator" aria-hidden="true">~</span>
+            <div>
+              <label class="field-label" for="page-to">끝 페이지</label>
+              <input id="page-to" class="control-input" type="number" min="1" max="100000" placeholder="24" required disabled />
+            </div>
+            <button id="save-button" class="button button-primary" type="submit" disabled>기록 저장</button>
+          </div>
+          <p id="form-message" class="form-message" role="status" hidden></p>
+        </form>
+
+        <div class="records-heading">
+          <h3>읽은 책</h3>
+          <span id="record-count" class="record-count">0권</span>
+        </div>
+        <div id="records-list" class="records-list" aria-live="polite">
+          <p class="empty-message">기록을 불러오는 중이에요.</p>
+        </div>
+      </section>
+
+      <footer class="page-footer">매일의 한 페이지가 멋진 이야기가 돼요 <span aria-hidden="true">♥</span></footer>
+    </main>
+
+    <dialog id="pin-dialog" class="pin-dialog">
+      <form id="pin-form">
+        <div class="dialog-heading">
+          <div><p class="eyebrow">CHILD ACCESS</p><h2 id="pin-heading">자녀 PIN 입력</h2></div>
+          <button id="close-pin" class="close-button" type="button" aria-label="닫기">×</button>
+        </div>
+        <p class="dialog-copy">기록을 관리하려면 자녀의 4자리 PIN이 필요해요.</p>
+        <label class="field-label" for="pin-input">4자리 PIN</label>
+        <input id="pin-input" class="control-input pin-input" type="password" inputmode="numeric" pattern="[0-9]{4}" minlength="4" maxlength="4" autocomplete="one-time-code" required />
+        <p id="pin-error" class="form-message error-message" role="alert" hidden></p>
+        <button class="button button-primary dialog-submit" type="submit">확인</button>
+      </form>
+    </dialog>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../supabase-config.js"></script>
+    <script src="booklist.js"></script>
+  </body>
+</html>
