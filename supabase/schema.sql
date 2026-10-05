@@ -341,3 +341,133 @@ grant execute on function public.verify_child_pin(text, text) to anon, authentic
 grant execute on function public.change_child_pin(text, text, text) to anon, authenticated;
 grant execute on function public.lock_child_session(text, text) to anon, authenticated;
 grant execute on function public.set_task_completion(text, text, date, boolean, text) to anon, authenticated;
+
+create table if not exists public.book_reading_records (
+  id uuid primary key default extensions.gen_random_uuid(),
+  child_id text not null,
+  reading_date date not null,
+  title text not null check (char_length(title) between 1 and 200),
+  page_from integer not null check (page_from between 1 and 100000),
+  page_to integer not null check (page_to between page_from and 100000),
+  created_at timestamptz not null default now()
+);
+
+create index if not exists book_reading_records_child_date_idx
+  on public.book_reading_records (child_id, reading_date);
+
+alter table public.book_reading_records enable row level security;
+
+drop policy if exists "Book reading records are readable" on public.book_reading_records;
+create policy "Book reading records are readable"
+  on public.book_reading_records for select
+  to anon, authenticated
+  using (true);
+
+grant select on public.book_reading_records to anon, authenticated;
+revoke insert, update, delete on public.book_reading_records from anon, authenticated;
+
+create or replace function public.save_book_reading(
+  p_id uuid,
+  p_child_id text,
+  p_reading_date date,
+  p_title text,
+  p_page_from integer,
+  p_page_to integer,
+  p_child_token text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_record public.book_reading_records;
+begin
+  if p_child_id is null or p_reading_date is null or p_title is null
+     or p_page_from is null or p_page_to is null or p_child_token is null then
+    raise exception 'A child, date, book title, page range, and session token are required.';
+  end if;
+  if char_length(btrim(p_title)) not between 1 and 200
+     or p_page_from < 1 or p_page_to < p_page_from or p_page_to > 100000 then
+    raise exception 'Enter a book title (up to 200 characters) and a valid page range.';
+  end if;
+  if not exists (
+    select 1
+      from public.child_sessions
+     where child_id = p_child_id
+       and token_hash = extensions.digest(p_child_token, 'sha256')
+       and expires_at > now()
+  ) then
+    raise exception 'The child session has expired. Enter the PIN again.';
+  end if;
+  if not exists (
+    select 1
+      from public.family_state as family,
+           lateral jsonb_array_elements(family.children) as children(child)
+     where family.id = 1
+       and child ->> 'id' = p_child_id
+  ) then
+    raise exception 'The selected child does not exist.';
+  end if;
+
+  if p_id is null then
+    insert into public.book_reading_records
+      (child_id, reading_date, title, page_from, page_to)
+    values
+      (p_child_id, p_reading_date, btrim(p_title), p_page_from, p_page_to)
+    returning * into v_record;
+  else
+    update public.book_reading_records
+       set reading_date = p_reading_date,
+           title = btrim(p_title),
+           page_from = p_page_from,
+           page_to = p_page_to
+     where id = p_id
+       and child_id = p_child_id
+    returning * into v_record;
+    if not found then
+      raise exception 'The reading record was not found for this child.';
+    end if;
+  end if;
+  return to_jsonb(v_record);
+end;
+$$;
+
+create or replace function public.delete_book_reading(
+  p_id uuid,
+  p_child_id text,
+  p_child_token text
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public, extensions, pg_temp
+as $$
+begin
+  if p_id is null or p_child_id is null or p_child_token is null then
+    raise exception 'A reading record, child, and session token are required.';
+  end if;
+  if not exists (
+    select 1
+      from public.child_sessions
+     where child_id = p_child_id
+       and token_hash = extensions.digest(p_child_token, 'sha256')
+       and expires_at > now()
+  ) then
+    raise exception 'The child session has expired. Enter the PIN again.';
+  end if;
+
+  delete from public.book_reading_records
+   where id = p_id
+     and child_id = p_child_id;
+  if not found then
+    raise exception 'The reading record was not found for this child.';
+  end if;
+  return true;
+end;
+$$;
+
+revoke all on function public.save_book_reading(uuid, text, date, text, integer, integer, text) from public;
+revoke all on function public.delete_book_reading(uuid, text, text) from public;
+grant execute on function public.save_book_reading(uuid, text, date, text, integer, integer, text) to anon, authenticated;
+grant execute on function public.delete_book_reading(uuid, text, text) to anon, authenticated;
