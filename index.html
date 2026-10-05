@@ -78,11 +78,24 @@
               <p id="task-progress" class="progress-copy"></p>
               <p id="child-view-hint" class="child-view-hint" hidden>오늘 할 일을 완료하고 별을 모아 보세요!</p>
             </div>
-            <div class="star-total" aria-label="총 적립 별">
+            <div class="star-total" aria-label="이번 주 / 누적 적립 별">
               <span class="star-total-icon" aria-hidden="true">★</span>
-              <span class="star-total-label">모은 별</span>
-              <strong id="total-stars">0</strong>
+              <span class="star-total-label">이번 주 / 누적</span>
+              <div class="star-total-values">
+                <strong id="weekly-stars">0</strong>
+                <span aria-hidden="true">/</span>
+                <strong id="total-stars">0</strong>
+              </div>
               <span class="star-unit">개</span>
+            </div>
+          </div>
+
+          <div id="child-access" class="child-access" hidden>
+            <p id="child-access-status" class="child-access-status">PIN을 입력하면 할 일을 체크할 수 있어요.</p>
+            <div class="child-access-actions">
+              <button id="child-unlock-button" class="button button-quiet" type="button">4자리 PIN 입력</button>
+              <button id="child-change-pin-button" class="button button-quiet" type="button" hidden>PIN 변경</button>
+              <button id="child-lock-button" class="button button-quiet" type="button" hidden>잠금</button>
             </div>
           </div>
 
@@ -152,9 +165,49 @@
         </div>
         <label class="field-label" for="child-name">아이 이름</label>
         <input id="child-name" class="text-input" name="name" type="text" maxlength="20" placeholder="예: 지우" required />
+        <label class="field-label" for="child-pin">자녀 PIN (숫자 4자리)</label>
+        <input id="child-pin" class="text-input" name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" minlength="4" maxlength="4" autocomplete="new-password" aria-describedby="child-pin-hint" />
+        <p id="child-pin-hint" class="field-hint">새 자녀를 등록할 때 필수예요. 기존 자녀는 비워 두면 PIN을 유지합니다.</p>
+        <p id="child-error" class="form-error" role="alert" hidden></p>
         <div class="dialog-actions">
           <button class="button button-quiet" type="button" data-close-dialog>취소</button>
           <button class="button button-primary" type="submit">저장하기</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="child-unlock-dialog" class="form-dialog pin-dialog">
+      <form id="child-unlock-form">
+        <div class="dialog-heading">
+          <div><p class="eyebrow">CHILD ACCESS</p><h2 id="child-unlock-title">자녀 PIN 입력</h2></div>
+          <button class="icon-button" type="button" data-close-dialog aria-label="닫기">×</button>
+        </div>
+        <p class="pin-description">4자리 PIN을 입력하면 할 일 체크가 활성화돼요.</p>
+        <label class="field-label" for="child-unlock-pin">숫자 4자리 PIN</label>
+        <input id="child-unlock-pin" class="text-input pin-input" type="password" inputmode="numeric" pattern="[0-9]{4}" minlength="4" maxlength="4" autocomplete="current-password" required />
+        <p id="child-unlock-error" class="form-error" role="alert" hidden></p>
+        <div class="dialog-actions">
+          <button class="button button-quiet" type="button" data-close-dialog>취소</button>
+          <button class="button button-primary" type="submit">확인</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="child-change-pin-dialog" class="form-dialog pin-dialog">
+      <form id="child-change-pin-form">
+        <div class="dialog-heading">
+          <div><p class="eyebrow">CHILD ACCESS</p><h2>자녀 PIN 변경</h2></div>
+          <button class="icon-button" type="button" data-close-dialog aria-label="닫기">×</button>
+        </div>
+        <p class="pin-description">새 PIN은 숫자 4자리로 설정해 주세요.</p>
+        <label class="field-label" for="child-new-pin">새 PIN</label>
+        <input id="child-new-pin" class="text-input pin-input" type="password" inputmode="numeric" pattern="[0-9]{4}" minlength="4" maxlength="4" autocomplete="new-password" required />
+        <label class="field-label" for="child-confirm-pin">새 PIN 확인</label>
+        <input id="child-confirm-pin" class="text-input pin-input" type="password" inputmode="numeric" pattern="[0-9]{4}" minlength="4" maxlength="4" autocomplete="new-password" required />
+        <p id="child-change-pin-error" class="form-error" role="alert" hidden></p>
+        <div class="dialog-actions">
+          <button class="button button-quiet" type="button" data-close-dialog>취소</button>
+          <button class="button button-primary" type="submit">PIN 저장</button>
         </div>
       </form>
     </dialog>

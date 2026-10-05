@@ -22,7 +22,13 @@
     selectedDate: $("#selected-date"),
     selectedDateLabel: $("#selected-date-label"),
     taskProgress: $("#task-progress"),
+    weeklyStars: $("#weekly-stars"),
     totalStars: $("#total-stars"),
+    childAccess: $("#child-access"),
+    childAccessStatus: $("#child-access-status"),
+    childUnlockButton: $("#child-unlock-button"),
+    childChangePinButton: $("#child-change-pin-button"),
+    childLockButton: $("#child-lock-button"),
     taskList: $("#task-list"),
     emptyTasks: $("#empty-tasks"),
     scheduleManager: $("#schedule-manager"),
@@ -46,7 +52,19 @@
     childDialog: $("#child-dialog"),
     childForm: $("#child-form"),
     childName: $("#child-name"),
+    childPin: $("#child-pin"),
+    childError: $("#child-error"),
     childDialogTitle: $("#child-dialog-title"),
+    childUnlockDialog: $("#child-unlock-dialog"),
+    childUnlockForm: $("#child-unlock-form"),
+    childUnlockPin: $("#child-unlock-pin"),
+    childUnlockTitle: $("#child-unlock-title"),
+    childUnlockError: $("#child-unlock-error"),
+    childChangePinDialog: $("#child-change-pin-dialog"),
+    childChangePinForm: $("#child-change-pin-form"),
+    childNewPin: $("#child-new-pin"),
+    childConfirmPin: $("#child-confirm-pin"),
+    childChangePinError: $("#child-change-pin-error"),
     taskDialog: $("#task-dialog"),
     taskDialogTitle: $("#task-dialog-title"),
     taskForm: $("#task-form"),
@@ -77,6 +95,7 @@
   let currentView = "child";
   let stateVersion = 0;
   let adminAuthenticated = false;
+  let childSession = null;
   elements.selectedDate.value = todayString();
 
   function getStateSnapshot() {
@@ -200,6 +219,47 @@
   function getTotalStars(childId) {
     let total = 0;
     for (const dates of Object.values(state.completions[childId] ?? {})) {
+      for (const [taskId, earned] of Object.entries(dates)) {
+        if (typeof earned === "number") {
+          total += earned;
+        } else if (earned) {
+          const task = state.tasks.find((item) => item.id === taskId && item.childId === childId);
+          total += Number(task?.stars) || 0;
+        }
+      }
+    }
+    return total;
+  }
+
+  async function lockChildSession() {
+    if (!childSession) return;
+    const session = childSession;
+    childSession = null;
+    try {
+      if (!supabaseClient) throw new Error("Supabase 연결 설정이 필요합니다.");
+      const { error } = await supabaseClient.rpc("lock_child_session", {
+        p_child_id: session.childId,
+        p_child_token: session.token,
+      });
+      if (error) throw error;
+    } catch (error) {
+      console.error("자녀 화면 잠금에 실패했습니다.", error);
+      window.alert(`자녀 화면을 잠갔지만 서버 세션을 종료하지 못했습니다. ${error.message}`);
+    }
+  }
+
+  function getWeeklyStars(childId, dateString) {
+    const selectedDate = new Date(`${dateString}T12:00:00`);
+    if (Number.isNaN(selectedDate.getTime())) return 0;
+    const weekStart = new Date(selectedDate);
+    weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 6);
+    const weekStartString = `${weekStart.getFullYear()}-${String(weekStart.getMonth() + 1).padStart(2, "0")}-${String(weekStart.getDate()).padStart(2, "0")}`;
+    const weekEndString = `${weekEnd.getFullYear()}-${String(weekEnd.getMonth() + 1).padStart(2, "0")}-${String(weekEnd.getDate()).padStart(2, "0")}`;
+    let total = 0;
+    for (const [completionDate, dates] of Object.entries(state.completions[childId] ?? {})) {
+      if (completionDate < weekStartString || completionDate > weekEndString) continue;
       for (const [taskId, earned] of Object.entries(dates)) {
         if (typeof earned === "number") {
           total += earned;
@@ -390,6 +450,99 @@
     }
   });
 
+  elements.childUnlockButton.addEventListener("click", () => {
+    const child = state.children.find((item) => item.id === selectedChildId);
+    if (!child || currentView !== "child") return;
+    elements.childUnlockForm.reset();
+    elements.childUnlockError.hidden = true;
+    elements.childUnlockTitle.textContent = `${child.name}님 PIN 입력`;
+    elements.childUnlockDialog.showModal();
+    elements.childUnlockPin.focus();
+  });
+
+  elements.childUnlockForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const child = state.children.find((item) => item.id === selectedChildId);
+    if (!child || currentView !== "child") return;
+    try {
+      if (!supabaseClient) throw new Error("Supabase 연결 설정이 필요합니다.");
+      const { data, error } = await supabaseClient.rpc("verify_child_pin", {
+        p_child_id: child.id,
+        p_pin: elements.childUnlockPin.value,
+      });
+      if (error) throw error;
+      if (typeof data !== "string" || !data) {
+        elements.childUnlockError.textContent = "PIN이 올바르지 않거나 잠시 잠겨 있어요. 다시 확인해 주세요.";
+        elements.childUnlockError.hidden = false;
+        elements.childUnlockPin.focus();
+        return;
+      }
+      if (selectedChildId !== child.id || currentView !== "child") {
+        const { error: lockError } = await supabaseClient.rpc("lock_child_session", {
+          p_child_id: child.id,
+          p_child_token: data,
+        });
+        if (lockError) throw lockError;
+        return;
+      }
+      childSession = { childId: child.id, token: data };
+      elements.childUnlockDialog.close();
+      renderDashboard();
+    } catch (error) {
+      console.error("자녀 PIN 확인에 실패했습니다.", error);
+      elements.childUnlockError.textContent = `PIN을 확인하지 못했습니다. ${error.message}`;
+      elements.childUnlockError.hidden = false;
+    }
+  });
+
+  elements.childChangePinButton.addEventListener("click", () => {
+    if (currentView !== "child" || childSession?.childId !== selectedChildId) return;
+    elements.childChangePinForm.reset();
+    elements.childChangePinError.hidden = true;
+    elements.childChangePinDialog.showModal();
+    elements.childNewPin.focus();
+  });
+
+  elements.childChangePinForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (currentView !== "child" || childSession?.childId !== selectedChildId) return;
+    const newPin = elements.childNewPin.value;
+    if (!/^\d{4}$/.test(newPin)) {
+      elements.childChangePinError.textContent = "새 PIN은 숫자 4자리로 입력해 주세요.";
+      elements.childChangePinError.hidden = false;
+      elements.childNewPin.focus();
+      return;
+    }
+    if (newPin !== elements.childConfirmPin.value) {
+      elements.childChangePinError.textContent = "새 PIN과 확인 값이 일치하지 않습니다.";
+      elements.childChangePinError.hidden = false;
+      elements.childConfirmPin.focus();
+      return;
+    }
+    try {
+      const { error } = await supabaseClient.rpc("change_child_pin", {
+        p_child_id: childSession.childId,
+        p_child_token: childSession.token,
+        p_new_pin: newPin,
+      });
+      if (error) throw error;
+      childSession = null;
+      elements.childChangePinDialog.close();
+      renderDashboard();
+      elements.childAccessStatus.textContent = "PIN을 변경했습니다. 새 PIN으로 다시 입력해 주세요.";
+    } catch (error) {
+      console.error("자녀 PIN 변경에 실패했습니다.", error);
+      elements.childChangePinError.textContent = `PIN을 변경하지 못했습니다. ${error.message}`;
+      elements.childChangePinError.hidden = false;
+    }
+  });
+
+  elements.childLockButton.addEventListener("click", async () => {
+    if (!childSession || childSession.childId !== selectedChildId || currentView !== "child") return;
+    await lockChildSession();
+    renderDashboard();
+  });
+
   $("#add-schedule-row-button").addEventListener("click", () => {
     elements.scheduleError.hidden = true;
     if (state.children.length === 0) {
@@ -482,7 +635,19 @@
       ? `${applicableTasks.length}개의 할 일 중 ${doneCount}개 완료`
       : "이 날 예정된 할 일이 없어요.";
     elements.totalStars.textContent = String(getTotalStars(child.id));
+    elements.weeklyStars.textContent = String(getWeeklyStars(child.id, dateString));
+    const childIsAuthenticated = childSession?.childId === child.id;
+    elements.childAccess.hidden = currentView !== "child";
+    elements.childAccessStatus.textContent = childIsAuthenticated
+      ? `${child.name}님, 할 일을 체크할 수 있어요.`
+      : "PIN을 입력하면 할 일을 체크할 수 있어요.";
+    elements.childUnlockButton.hidden = childIsAuthenticated;
+    elements.childChangePinButton.hidden = !childIsAuthenticated;
+    elements.childLockButton.hidden = !childIsAuthenticated;
     elements.childViewHint.hidden = currentView !== "child";
+    elements.childViewHint.textContent = childIsAuthenticated
+      ? "할 일을 완료하고 별을 모아 보세요!"
+      : "PIN 입력 전에는 할 일 체크가 잠겨 있어요.";
     elements.emptyTasks.hidden = tasks.length > 0;
     elements.taskList.hidden = applicableTasks.length === 0;
 
@@ -491,6 +656,7 @@
       return `
         <article class="task-card${complete ? " is-complete" : ""}">
           <button class="task-check" type="button" aria-label="${complete ? "완료 취소" : "완료로 표시"}: ${escapeHtml(task.title)}"
+            ${currentView === "child" && !childIsAuthenticated ? "disabled" : ""}
             aria-pressed="${complete}" data-action="toggle" data-task-id="${escapeHtml(task.id)}"></button>
           <div class="task-copy">
             <p class="task-title">${escapeHtml(task.title)}</p>
@@ -510,6 +676,9 @@
     const child = state.children.find((item) => item.id === childId);
     elements.childDialogTitle.textContent = child ? "자녀 이름 변경" : "자녀 추가";
     elements.childName.value = child?.name ?? "";
+    elements.childPin.value = "";
+    elements.childPin.required = !child;
+    elements.childError.hidden = true;
     elements.childDialog.showModal();
     elements.childName.focus();
   }
@@ -539,9 +708,10 @@
     elements.monthdayOptions.hidden = repeatType !== "monthly";
   }
 
-  elements.childTabs.addEventListener("click", (event) => {
+  elements.childTabs.addEventListener("click", async (event) => {
     const tab = event.target.closest("[data-child-id]");
     if (!tab) return;
+    if (selectedChildId !== tab.dataset.childId) await lockChildSession();
     selectedChildId = tab.dataset.childId;
     renderChildren();
   });
@@ -549,6 +719,8 @@
   document.querySelectorAll("[data-view]").forEach((button) => {
     button.addEventListener("click", async () => {
       if (button.dataset.view === "admin") {
+        await lockChildSession();
+        renderDashboard();
         elements.adminPinForm.reset();
         elements.adminPinError.hidden = true;
         elements.adminPinDialog.showModal();
@@ -567,6 +739,7 @@
         return;
       }
       currentView = button.dataset.view;
+      await lockChildSession();
       renderChildren();
     });
   });
@@ -661,6 +834,15 @@
       selectedChildId = state.children[0]?.id ?? null;
       return;
     }
+    try {
+      const { error } = await supabaseClient.rpc("admin_delete_child_pin", {
+        p_child_id: child.id,
+      });
+      if (error) throw error;
+    } catch (error) {
+      console.error("삭제한 자녀의 PIN을 정리하지 못했습니다.", error);
+      window.alert(`자녀와 할 일은 삭제했지만 PIN 정보를 정리하지 못했습니다. ${error.message}`);
+    }
     renderChildren();
   });
   $("#add-task-button").addEventListener("click", () => {
@@ -696,12 +878,36 @@
     if (currentView !== "admin") return;
     const name = elements.childName.value.trim();
     if (!name) return;
+    const pin = elements.childPin.value;
+    if ((!editingChildId || pin) && !/^\d{4}$/.test(pin)) {
+      elements.childError.textContent = "자녀 PIN은 숫자 4자리로 입력해 주세요.";
+      elements.childError.hidden = false;
+      elements.childPin.focus();
+      return;
+    }
     const previousState = getStateSnapshot();
+    let childId = editingChildId;
+    if (!childId) childId = makeId();
+    if (pin) {
+      try {
+        if (!supabaseClient) throw new Error("Supabase 연결 설정이 필요합니다.");
+        const { error } = await supabaseClient.rpc("admin_set_child_pin", {
+          p_child_id: childId,
+          p_pin: pin,
+        });
+        if (error) throw error;
+      } catch (error) {
+        console.error("자녀 PIN을 저장하지 못했습니다.", error);
+        elements.childError.textContent = `자녀 PIN을 저장하지 못했습니다. ${error.message}`;
+        elements.childError.hidden = false;
+        return;
+      }
+    }
     if (editingChildId) {
       const child = state.children.find((item) => item.id === editingChildId);
       if (child) child.name = name;
     } else {
-      const child = { id: makeId(), name };
+      const child = { id: childId, name };
       state.children.push(child);
       selectedChildId = child.id;
     }
@@ -766,11 +972,13 @@
       if (currentView === "child") {
         try {
           if (!supabaseClient) throw new Error("Supabase 연결 설정이 필요합니다.");
+          if (childSession?.childId !== task.childId) throw new Error("먼저 자녀 PIN을 입력해 주세요.");
           const { data, error } = await supabaseClient.rpc("set_task_completion", {
             p_child_id: task.childId,
             p_task_id: task.id,
             p_date: dateString,
             p_complete: !Boolean(getCompletions(task.childId, dateString)[task.id]),
+            p_child_token: childSession.token,
           });
           if (error) throw error;
           state.completions[task.childId] ??= {};
@@ -783,6 +991,11 @@
           renderDashboard();
         } catch (error) {
           console.error("할 일 완료 상태를 저장하지 못했습니다.", error);
+          if (error.message.includes("session has expired") &&
+              childSession?.childId === task.childId) {
+            childSession = null;
+            renderDashboard();
+          }
           window.alert(`완료 상태를 저장하지 못했습니다. ${error.message}`);
         }
         return;
