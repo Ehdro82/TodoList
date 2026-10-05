@@ -29,6 +29,7 @@ jobs:
         run: |
           mkdir -p _site
           cp index.html app.js styles.css supabase-config.js .nojekyll _site/
+          cp -R BookList _site/BookList
       - name: Upload static app
         uses: actions/upload-pages-artifact@v3
         with:
