@@ -15,7 +15,6 @@
           <span>반짝반짝 <strong>할 일표</strong></span>
         </a>
         <div class="topbar-actions">
-          <a class="button button-primary booklist-link" href="BookList/">📚 독서 기록</a>
           <span class="topbar-note"><span class="status-dot"></span> 우리 가족의 작은 성취</span>
         </div>
       </header>
@@ -74,67 +73,178 @@
         </div>
 
         <div id="child-content">
-          <div class="summary-row">
-            <div class="summary-copy">
-              <span id="selected-date-label" class="date-label"></span>
-              <h3><span id="child-name-heading"></span>의 할 일</h3>
-              <p id="task-progress" class="progress-copy"></p>
-              <p id="child-view-hint" class="child-view-hint" hidden>오늘 할 일을 완료하고 별을 모아 보세요!</p>
-            </div>
-            <div class="star-total" aria-label="이번 주 / 누적 적립 별">
-              <span class="star-total-icon" aria-hidden="true">★</span>
-              <span class="star-total-label">이번 주 / 누적</span>
-              <div class="star-total-values">
-                <strong id="weekly-stars">0</strong>
-                <span aria-hidden="true">/</span>
-                <strong id="total-stars">0</strong>
+          <div class="section-tabs" role="tablist" aria-label="자녀 기록 종류">
+            <button id="tasks-tab" class="section-tab" type="button" role="tab" aria-selected="true" aria-controls="tasks-panel">오늘의 할 일</button>
+            <button id="reading-tab" class="section-tab" type="button" role="tab" aria-selected="false" aria-controls="reading-panel">독서 기록</button>
+          </div>
+
+          <section id="tasks-panel" role="tabpanel" aria-labelledby="tasks-tab">
+            <div class="summary-row">
+              <div class="summary-copy">
+                <span id="selected-date-label" class="date-label"></span>
+                <h3><span id="child-name-heading"></span>의 할 일</h3>
+                <p id="task-progress" class="progress-copy"></p>
+                <p id="child-view-hint" class="child-view-hint" hidden>오늘 할 일을 완료하고 별을 모아 보세요!</p>
               </div>
-              <span class="star-unit">개</span>
+              <div class="star-total" aria-label="이번 주 / 누적 적립 별">
+                <span class="star-total-icon" aria-hidden="true">★</span>
+                <span class="star-total-label">이번 주 / 누적</span>
+                <div class="star-total-values">
+                  <strong id="weekly-stars">0</strong>
+                  <span aria-hidden="true">/</span>
+                  <strong id="total-stars">0</strong>
+                </div>
+                <span class="star-unit">개</span>
+              </div>
             </div>
-          </div>
 
-          <div id="child-access" class="child-access" hidden>
-            <p id="child-access-status" class="child-access-status">PIN을 입력하면 할 일을 체크할 수 있어요.</p>
-            <div class="child-access-actions">
-              <button id="child-unlock-button" class="button button-quiet" type="button">4자리 PIN 입력</button>
-              <button id="child-change-pin-button" class="button button-quiet" type="button" hidden>PIN 변경</button>
-              <button id="child-lock-button" class="button button-quiet" type="button" hidden>잠금</button>
+            <div id="child-access" class="child-access" hidden>
+              <p id="child-access-status" class="child-access-status">PIN을 입력하면 할 일과 독서 기록을 입력할 수 있어요.</p>
+              <div class="child-access-actions">
+                <button id="child-unlock-button" class="button button-quiet" type="button">4자리 PIN 입력</button>
+                <button id="child-change-pin-button" class="button button-quiet" type="button" hidden>PIN 변경</button>
+                <button id="child-lock-button" class="button button-quiet" type="button" hidden>잠금</button>
+              </div>
             </div>
-          </div>
 
-          <div id="task-list" class="task-list"></div>
-          <div id="empty-tasks" class="empty-state empty-tasks" hidden>
-            <div class="empty-icon" aria-hidden="true">✎</div>
-            <h3 id="empty-tasks-title">아직 등록된 할 일이 없어요</h3>
-            <p id="empty-tasks-copy">할 일을 추가하고 아이와 함께 즐거운 습관을 시작해 보세요.</p>
-          </div>
+            <div id="task-list" class="task-list"></div>
+            <div id="empty-tasks" class="empty-state empty-tasks" hidden>
+              <div class="empty-icon" aria-hidden="true">✎</div>
+              <h3 id="empty-tasks-title">아직 등록된 할 일이 없어요</h3>
+              <p id="empty-tasks-copy">할 일을 추가하고 아이와 함께 즐거운 습관을 시작해 보세요.</p>
+            </div>
 
-          <div class="manage-row">
-            <p><span class="info-icon" aria-hidden="true">i</span> 완료한 할 일은 날짜별로 저장돼요.</p>
-            <button id="add-task-button" class="button button-primary" type="button">＋ 할 일 추가</button>
+            <div class="manage-row">
+              <p><span class="info-icon" aria-hidden="true">i</span> 완료한 할 일은 날짜별로 저장돼요.</p>
+              <button id="add-task-button" class="button button-primary" type="button">＋ 할 일 추가</button>
+            </div>
+          </section>
+
+          <section id="reading-panel" class="reading-panel" role="tabpanel" aria-labelledby="reading-tab" hidden>
+            <div class="reading-heading">
+              <div>
+                <span id="reading-date-label" class="date-label"></span>
+                <h3><span id="reading-child-name"></span>의 독서 기록</h3>
+              </div>
+              <p id="reading-summary" class="reading-summary" aria-live="polite"></p>
+            </div>
+            <div class="child-access">
+              <p id="reading-access-status" class="child-access-status"></p>
+              <div class="child-access-actions">
+                <button id="reading-unlock-button" class="button button-quiet" type="button">4자리 PIN 입력</button>
+                <button id="reading-lock-button" class="button button-quiet" type="button" hidden>잠금</button>
+              </div>
+            </div>
+            <form id="reading-form" class="reading-form">
+              <div class="reading-form-heading">
+                <h4 id="reading-form-heading">읽은 책 추가</h4>
+                <button id="reading-cancel-edit" class="text-button" type="button" hidden>수정 취소</button>
+              </div>
+              <div class="reading-fields">
+                <label class="reading-field reading-title-field">
+                  <span>책 제목</span>
+                  <input id="reading-title" type="text" maxlength="200" placeholder="예: 마당을 나온 암탉" required disabled />
+                </label>
+                <label class="reading-field">
+                  <span>시작 페이지</span>
+                  <input id="reading-page-from" type="number" min="1" max="100000" placeholder="1" required disabled />
+                </label>
+                <span class="reading-page-separator" aria-hidden="true">~</span>
+                <label class="reading-field">
+                  <span>끝 페이지</span>
+                  <input id="reading-page-to" type="number" min="1" max="100000" placeholder="24" required disabled />
+                </label>
+                <button id="reading-save-button" class="button button-primary" type="submit" disabled>기록 저장</button>
+              </div>
+              <p id="reading-form-message" class="reading-form-message" role="status" hidden></p>
+            </form>
+            <div class="reading-records-heading">
+              <h4>읽은 책</h4>
+              <span id="reading-record-count" class="reading-record-count">0권</span>
+            </div>
+            <div id="reading-records" class="reading-records" aria-live="polite">
+              <p class="reading-empty">기록을 불러오는 중이에요.</p>
+            </div>
           </div>
         </div>
 
-        <section id="schedule-manager" class="schedule-manager" aria-labelledby="schedule-manager-title" hidden>
-          <div class="schedule-heading">
-            <div>
-              <p class="eyebrow">ALL FAMILY ROUTINES</p>
-              <h3 id="schedule-manager-title">전체 일정 목록</h3>
-              <p class="schedule-description">등록된 모든 자녀의 일정을 한곳에서 추가·수정하거나 여러 개씩 삭제할 수 있어요.</p>
+        <div id="admin-sections" hidden>
+          <nav class="section-tabs admin-section-tabs" role="tablist" aria-label="관리자 관리 항목">
+            <button id="admin-schedules-tab" class="section-tab" type="button" role="tab" aria-selected="true" aria-controls="schedule-manager">전체 일정 목록</button>
+            <button id="admin-calendar-tab" class="section-tab" type="button" role="tab" aria-selected="false" aria-controls="reading-calendar-panel">독서 캘린더</button>
+            <button id="admin-stars-tab" class="section-tab" type="button" role="tab" aria-selected="false" aria-controls="star-deduction-panel">별 차감</button>
+          </nav>
+
+          <section id="schedule-manager" class="schedule-manager" role="tabpanel" aria-labelledby="admin-schedules-tab">
+            <div class="schedule-heading">
+              <div>
+                <p class="eyebrow">ALL FAMILY ROUTINES</p>
+                <h3 id="schedule-manager-title">전체 일정 목록</h3>
+                <p class="schedule-description">등록된 모든 자녀의 일정을 한곳에서 추가·수정하거나 여러 개씩 삭제할 수 있어요.</p>
+              </div>
+              <span id="schedule-count" class="schedule-count">0개 일정</span>
             </div>
-            <span id="schedule-count" class="schedule-count">0개 일정</span>
-          </div>
-          <div class="schedule-toolbar">
-            <label class="select-all-label"><input id="select-all-schedules" type="checkbox" /><span>전체 선택</span></label>
-            <div class="schedule-toolbar-actions">
-              <button id="add-schedule-row-button" class="button button-quiet" type="button">＋ 일정 추가</button>
-              <button id="delete-selected-schedules-button" class="button button-danger" type="button" disabled>선택 삭제</button>
-              <button id="save-schedules-button" class="button button-primary" type="button">변경사항 저장</button>
+            <div class="schedule-toolbar">
+              <label class="select-all-label"><input id="select-all-schedules" type="checkbox" /><span>전체 선택</span></label>
+              <div class="schedule-toolbar-actions">
+                <button id="add-schedule-row-button" class="button button-quiet" type="button">＋ 일정 추가</button>
+                <button id="delete-selected-schedules-button" class="button button-danger" type="button" disabled>선택 삭제</button>
+                <button id="save-schedules-button" class="button button-primary" type="button">변경사항 저장</button>
+              </div>
             </div>
-          </div>
-          <div id="schedule-list" class="schedule-list"></div>
-          <p id="schedule-error" class="schedule-error" role="alert" hidden></p>
-        </section>
+            <div id="schedule-list" class="schedule-list"></div>
+            <p id="schedule-error" class="schedule-error" role="alert" hidden></p>
+          </section>
+
+          <section id="reading-calendar-panel" class="admin-panel schedule-manager" role="tabpanel" aria-labelledby="admin-calendar-tab" hidden>
+            <div class="schedule-heading">
+              <div>
+                <p class="eyebrow">FAMILY READING LOG</p>
+                <h3>월간 독서 캘린더</h3>
+                <p class="schedule-description">날짜별로 자녀들이 읽은 책을 확인할 수 있어요.</p>
+              </div>
+              <div class="calendar-month-controls">
+                <button id="previous-calendar-month" class="date-nav-button" type="button" aria-label="이전 달">‹</button>
+                <strong id="calendar-month-label"></strong>
+                <button id="next-calendar-month" class="date-nav-button" type="button" aria-label="다음 달">›</button>
+              </div>
+            </div>
+            <div id="calendar-legend" class="calendar-legend" aria-label="자녀별 색상"></div>
+            <div id="reading-calendar" class="reading-calendar" role="grid" aria-label="월간 독서 기록"></div>
+            <p id="calendar-message" class="schedule-error" role="status" hidden></p>
+          </section>
+
+          <section id="star-deduction-panel" class="admin-panel schedule-manager" role="tabpanel" aria-labelledby="admin-stars-tab" hidden>
+            <div class="schedule-heading">
+              <div>
+                <p class="eyebrow">STAR BALANCE</p>
+                <h3>자녀 별 차감</h3>
+                <p class="schedule-description">자녀의 누적 별에서 차감할 개수와 사유를 기록합니다.</p>
+              </div>
+            </div>
+            <form id="star-deduction-form" class="star-deduction-form">
+              <label class="deduction-field">
+                <span>자녀</span>
+                <select id="deduction-child" class="text-input" required></select>
+              </label>
+              <div class="deduction-balance">현재 누적 별 <strong id="deduction-balance">0</strong>개</div>
+              <label class="deduction-field">
+                <span>차감할 별</span>
+                <input id="deduction-stars" class="text-input" type="number" min="1" step="1" required />
+              </label>
+              <label class="deduction-field deduction-reason-field">
+                <span>차감 사유</span>
+                <input id="deduction-reason" class="text-input" type="text" maxlength="500" placeholder="차감 사유를 입력해 주세요" required />
+              </label>
+              <button id="deduction-submit" class="button button-primary" type="submit">별 차감 저장</button>
+            </form>
+            <p id="deduction-message" class="deduction-message" role="status" hidden></p>
+            <div class="deduction-history-heading">
+              <h4>차감 내역</h4>
+            </div>
+            <div id="deduction-history" class="deduction-history"></div>
+          </section>
+        </div>
       </section>
 
       <footer class="page-footer">작은 약속이 모여 큰 자신감이 돼요 <span aria-hidden="true">♥</span></footer>
@@ -185,7 +295,7 @@
           <div><p class="eyebrow">CHILD ACCESS</p><h2 id="child-unlock-title">자녀 PIN 입력</h2></div>
           <button class="icon-button" type="button" data-close-dialog aria-label="닫기">×</button>
         </div>
-        <p class="pin-description">4자리 PIN을 입력하면 할 일 체크가 활성화돼요.</p>
+        <p class="pin-description">4자리 PIN을 입력하면 할 일을 체크하고 독서 기록을 저장할 수 있어요.</p>
         <label class="field-label" for="child-unlock-pin">숫자 4자리 PIN</label>
         <input id="child-unlock-pin" class="text-input pin-input" type="password" inputmode="numeric" pattern="[0-9]{4}" minlength="4" maxlength="4" autocomplete="current-password" required />
         <p id="child-unlock-error" class="form-error" role="alert" hidden></p>

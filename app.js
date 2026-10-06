@@ -2,6 +2,7 @@
   "use strict";
 
   const WEEKDAY_NAMES = ["일", "월", "화", "수", "목", "금", "토"];
+  const CALENDAR_CHILD_COLORS = ["#7164da", "#e57b53", "#3d9b7a", "#d45d91", "#4489c2", "#b0842d", "#8a64b6", "#5f8b45"];
   const $ = (selector) => document.querySelector(selector);
   const supabaseConfig = window.TODO_SUPABASE_CONFIG;
   const supabaseClient = window.supabase?.createClient &&
@@ -19,6 +20,26 @@
     childNameHeading: $("#child-name-heading"),
     dashboardTitle: $("#dashboard-title"),
     childViewHint: $("#child-view-hint"),
+    tasksTab: $("#tasks-tab"),
+    readingTab: $("#reading-tab"),
+    tasksPanel: $("#tasks-panel"),
+    readingPanel: $("#reading-panel"),
+    readingDateLabel: $("#reading-date-label"),
+    readingChildName: $("#reading-child-name"),
+    readingSummary: $("#reading-summary"),
+    readingAccessStatus: $("#reading-access-status"),
+    readingUnlockButton: $("#reading-unlock-button"),
+    readingLockButton: $("#reading-lock-button"),
+    readingForm: $("#reading-form"),
+    readingFormHeading: $("#reading-form-heading"),
+    readingTitle: $("#reading-title"),
+    readingPageFrom: $("#reading-page-from"),
+    readingPageTo: $("#reading-page-to"),
+    readingSaveButton: $("#reading-save-button"),
+    readingCancelEdit: $("#reading-cancel-edit"),
+    readingFormMessage: $("#reading-form-message"),
+    readingRecordCount: $("#reading-record-count"),
+    readingRecords: $("#reading-records"),
     selectedDate: $("#selected-date"),
     selectedDateLabel: $("#selected-date-label"),
     taskProgress: $("#task-progress"),
@@ -32,6 +53,24 @@
     taskList: $("#task-list"),
     emptyTasks: $("#empty-tasks"),
     scheduleManager: $("#schedule-manager"),
+    adminSections: $("#admin-sections"),
+    adminSchedulesTab: $("#admin-schedules-tab"),
+    adminCalendarTab: $("#admin-calendar-tab"),
+    adminStarsTab: $("#admin-stars-tab"),
+    readingCalendarPanel: $("#reading-calendar-panel"),
+    calendarMonthLabel: $("#calendar-month-label"),
+    calendarLegend: $("#calendar-legend"),
+    readingCalendar: $("#reading-calendar"),
+    calendarMessage: $("#calendar-message"),
+    deductionPanel: $("#star-deduction-panel"),
+    deductionForm: $("#star-deduction-form"),
+    deductionChild: $("#deduction-child"),
+    deductionBalance: $("#deduction-balance"),
+    deductionStars: $("#deduction-stars"),
+    deductionReason: $("#deduction-reason"),
+    deductionSubmit: $("#deduction-submit"),
+    deductionMessage: $("#deduction-message"),
+    deductionHistory: $("#deduction-history"),
     scheduleList: $("#schedule-list"),
     scheduleCount: $("#schedule-count"),
     selectAllSchedules: $("#select-all-schedules"),
@@ -88,7 +127,7 @@
     return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
   }
 
-  let state = { children: [], tasks: [], completions: {} };
+  let state = { children: [], tasks: [], completions: {}, starDeductions: [], deductionHistory: [] };
   let selectedChildId = null;
   let editingChildId = null;
   let editingTaskId = null;
@@ -96,6 +135,14 @@
   let stateVersion = 0;
   let adminAuthenticated = false;
   let childSession = null;
+  let readingRecords = [];
+  let readingLoadMessage = "";
+  let editingReadingId = null;
+  let readingRecordsRequestId = 0;
+  let activeChildSection = "tasks";
+  let activeAdminSection = "schedules";
+  let calendarMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+  let calendarRecordsRequestId = 0;
   elements.selectedDate.value = todayString();
 
   function getStateSnapshot() {
@@ -151,6 +198,24 @@
     state.completions = completions;
   }
 
+  async function loadStarDeductions() {
+    const { data, error } = await supabaseClient
+      .rpc("get_child_star_deduction_totals");
+    if (error) throw error;
+    state.starDeductions = data;
+    renderDeductionPanel();
+  }
+
+  async function loadDeductionHistory() {
+    const { data, error } = await supabaseClient
+      .from("star_deductions")
+      .select("id, child_id, stars, reason, created_at")
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    state.deductionHistory = data;
+    renderDeductionPanel();
+  }
+
   async function initializeState() {
     if (!supabaseClient) {
       window.alert("Supabase 연결 설정이 필요합니다. supabase-config.js에 프로젝트 URL과 anon key를 입력하세요.");
@@ -168,11 +233,21 @@
         children: Array.isArray(data.children) ? data.children : [],
         tasks: Array.isArray(data.tasks) ? data.tasks : [],
         completions: {},
+        deductionHistory: [],
+        starDeductions: [],
       };
       stateVersion = Number(data.version) || 0;
       await loadCompletions();
       selectedChildId = state.children[0]?.id ?? null;
       renderChildren();
+      try {
+        await loadStarDeductions();
+      } catch (error) {
+        console.error("별 차감 정보를 불러오지 못했습니다.", error);
+        window.alert(`별 차감 기능을 사용할 수 없습니다. 최신 supabase/schema.sql을 실행했는지 확인해 주세요. ${error.message}`);
+      }
+      renderDashboard();
+      await loadReadingRecords();
     } catch (error) {
       console.error("Supabase 가족 데이터를 불러오지 못했습니다.", error);
       window.alert(`가족 데이터를 불러오지 못했습니다. Supabase SQL 설정과 연결 정보를 확인해 주세요. ${error.message}`);
@@ -228,7 +303,10 @@
         }
       }
     }
-    return total;
+    const deducted = Number(
+      state.starDeductions.find((entry) => entry.child_id === childId)?.stars,
+    ) || 0;
+    return Math.max(0, total - deducted);
   }
 
   async function lockChildSession() {
@@ -274,6 +352,7 @@
 
   function renderChildren() {
     const isAdmin = currentView === "admin";
+    if (!isAdmin) state.deductionHistory = [];
     elements.childTabs.innerHTML = state.children.map((child) => `
       <button class="child-tab" type="button" role="tab" id="child-tab-${escapeHtml(child.id)}"
         aria-selected="${child.id === selectedChildId}" aria-controls="child-content" data-child-id="${escapeHtml(child.id)}">
@@ -302,11 +381,18 @@
       ? "할 일을 추가하고 아이와 함께 즐거운 습관을 시작해 보세요."
       : "다른 날짜를 확인하거나, 오늘의 할 일을 모두 마쳤는지 살펴보세요.";
     elements.dashboardTitle.textContent = isAdmin ? "우리 아이 할 일" : "자녀별 할 일";
-    elements.scheduleManager.hidden = !isAdmin;
+    elements.adminSections.hidden = !isAdmin;
+    elements.readingTab.hidden = isAdmin;
+    if (isAdmin) activeChildSection = "tasks";
+    updateChildSectionTabs();
+    renderReadingAccess();
+    renderReadingRecords();
     document.querySelectorAll("[data-view]").forEach((button) => {
       button.setAttribute("aria-pressed", String(button.dataset.view === currentView));
     });
     renderScheduleManager();
+    renderDeductionPanel();
+    updateAdminSections();
     if (!hasChildren) return;
 
     if (!state.children.some((child) => child.id === selectedChildId)) {
@@ -317,6 +403,212 @@
     });
     renderDashboard();
   }
+
+  function updateChildSectionTabs() {
+    const showReading = currentView !== "admin" && activeChildSection === "reading";
+    elements.tasksTab.setAttribute("aria-selected", String(!showReading));
+    elements.readingTab.setAttribute("aria-selected", String(showReading));
+    elements.tasksPanel.hidden = showReading;
+    elements.readingPanel.hidden = !showReading;
+  }
+
+  function setReadingMessage(message, isError = false) {
+    elements.readingFormMessage.textContent = message;
+    elements.readingFormMessage.classList.toggle("is-error", isError);
+    elements.readingFormMessage.hidden = !message;
+  }
+
+  function resetReadingForm() {
+    elements.readingForm.reset();
+    editingReadingId = null;
+    elements.readingFormHeading.textContent = "읽은 책 추가";
+    elements.readingSaveButton.textContent = "기록 저장";
+    elements.readingCancelEdit.hidden = true;
+    setReadingMessage("");
+  }
+
+  function renderReadingAccess() {
+    const child = state.children.find((item) => item.id === selectedChildId);
+    const unlocked = currentView === "child" && childSession?.childId === child?.id;
+    elements.readingAccessStatus.textContent = child
+      ? (unlocked ? `${child.name}님 PIN으로 독서 기록을 저장할 수 있어요.` : "자녀 PIN을 입력하면 할 일과 독서 기록을 입력할 수 있어요.")
+      : "먼저 자녀를 등록해 주세요.";
+    elements.readingUnlockButton.hidden = !child || unlocked;
+    elements.readingLockButton.hidden = !unlocked;
+    elements.readingForm.querySelectorAll("input, button").forEach((control) => {
+      control.disabled = !unlocked;
+    });
+    elements.readingCancelEdit.disabled = !unlocked;
+  }
+
+  function renderReadingRecords() {
+    const totalPages = readingRecords.reduce((total, record) =>
+      total + Number(record.page_to) - Number(record.page_from) + 1, 0);
+    elements.readingRecordCount.textContent = `${readingRecords.length}권`;
+    elements.readingSummary.textContent = `${readingRecords.length}권 · ${totalPages}페이지`;
+
+    if (readingRecords.length === 0) {
+      const emptyMessage = readingLoadMessage || "이 날짜에 기록된 책이 없어요. 첫 독서 기록을 남겨 보세요.";
+      elements.readingRecords.innerHTML = `<p class="reading-empty">${escapeHtml(emptyMessage)}</p>`;
+      return;
+    }
+    const canManage = currentView === "child" && childSession?.childId === selectedChildId;
+    elements.readingRecords.innerHTML = readingRecords.map((record) => `
+      <article class="reading-record">
+        <span class="reading-record-icon" aria-hidden="true">📖</span>
+        <div class="reading-record-copy">
+          <h4>${escapeHtml(record.title)}</h4>
+          <p>${Number(record.page_from)}~${Number(record.page_to)}페이지 · ${Number(record.page_to) - Number(record.page_from) + 1}페이지 읽음</p>
+        </div>
+        ${canManage ? `<div class="reading-record-actions">
+          <button class="reading-record-action" type="button" data-reading-action="edit" data-reading-id="${escapeHtml(record.id)}">수정</button>
+          <button class="reading-record-action is-delete" type="button" data-reading-action="delete" data-reading-id="${escapeHtml(record.id)}">삭제</button>
+        </div>` : ""}
+      </article>
+    `).join("");
+  }
+
+  async function loadReadingRecords() {
+    const requestId = ++readingRecordsRequestId;
+    const child = state.children.find((item) => item.id === selectedChildId);
+    const dateString = elements.selectedDate.value;
+    readingRecords = [];
+    if (!child) {
+      readingLoadMessage = "먼저 자녀를 등록해 주세요.";
+      renderReadingRecords();
+      return;
+    }
+    if (!supabaseClient) {
+      readingLoadMessage = "Supabase 연결 설정을 확인해 주세요.";
+      renderReadingRecords();
+      return;
+    }
+    readingLoadMessage = "기록을 불러오는 중이에요.";
+    elements.readingRecords.innerHTML = '<p class="reading-empty">기록을 불러오는 중이에요.</p>';
+    try {
+      const { data, error } = await supabaseClient
+        .from("book_reading_records")
+        .select("id, child_id, reading_date, title, page_from, page_to")
+        .eq("child_id", child.id)
+        .eq("reading_date", dateString)
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      if (requestId !== readingRecordsRequestId) return;
+      readingRecords = data;
+      readingLoadMessage = "";
+      renderReadingRecords();
+    } catch (error) {
+      if (requestId !== readingRecordsRequestId) return;
+      console.error("자녀별 독서 기록을 불러오지 못했습니다.", error);
+      readingLoadMessage = error.message;
+      renderReadingRecords();
+    }
+  }
+
+  elements.tasksTab.addEventListener("click", () => {
+    activeChildSection = "tasks";
+    updateChildSectionTabs();
+  });
+
+  elements.readingTab.addEventListener("click", () => {
+    activeChildSection = "reading";
+    updateChildSectionTabs();
+  });
+
+  elements.readingUnlockButton.addEventListener("click", () => {
+    elements.childUnlockButton.click();
+  });
+
+  elements.readingLockButton.addEventListener("click", () => {
+    elements.childLockButton.click();
+  });
+
+  elements.readingCancelEdit.addEventListener("click", resetReadingForm);
+
+  elements.readingForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const child = state.children.find((item) => item.id === selectedChildId);
+    if (!child || currentView !== "child" || childSession?.childId !== child.id) {
+      setReadingMessage("먼저 자녀 PIN을 입력해 주세요.", true);
+      return;
+    }
+    const pageFrom = Number(elements.readingPageFrom.value);
+    const pageTo = Number(elements.readingPageTo.value);
+    const title = elements.readingTitle.value.trim();
+    if (!elements.selectedDate.value || !title || title.length > 200 ||
+        !Number.isInteger(pageFrom) || !Number.isInteger(pageTo) ||
+        pageFrom < 1 || pageTo < pageFrom || pageTo > 100000) {
+      setReadingMessage("책 제목과 올바른 페이지 범위를 입력해 주세요.", true);
+      return;
+    }
+
+    elements.readingSaveButton.disabled = true;
+    try {
+      const { error } = await supabaseClient.rpc("save_book_reading", {
+        p_id: editingReadingId,
+        p_child_id: child.id,
+        p_reading_date: elements.selectedDate.value,
+        p_title: title,
+        p_page_from: pageFrom,
+        p_page_to: pageTo,
+        p_child_token: childSession.token,
+      });
+      if (error) throw error;
+      resetReadingForm();
+      await loadReadingRecords();
+    } catch (error) {
+      console.error("독서 기록을 저장하지 못했습니다.", error);
+      if (error.message.includes("session has expired")) {
+        childSession = null;
+        renderDashboard();
+      }
+      setReadingMessage(`기록을 저장하지 못했습니다. ${error.message}`, true);
+    } finally {
+      renderReadingAccess();
+    }
+  });
+
+  elements.readingRecords.addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-reading-action]");
+    if (!button) return;
+    const record = readingRecords.find((item) => item.id === button.dataset.readingId);
+    const child = state.children.find((item) => item.id === selectedChildId);
+    if (!record || !child || childSession?.childId !== child.id || currentView !== "child") return;
+    if (button.dataset.readingAction === "edit") {
+      editingReadingId = record.id;
+      elements.readingTitle.value = record.title;
+      elements.readingPageFrom.value = record.page_from;
+      elements.readingPageTo.value = record.page_to;
+      elements.readingFormHeading.textContent = "독서 기록 수정";
+      elements.readingSaveButton.textContent = "변경사항 저장";
+      elements.readingCancelEdit.hidden = false;
+      setReadingMessage("");
+      elements.readingTitle.focus();
+      elements.readingForm.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+    if (button.dataset.readingAction !== "delete" ||
+        !window.confirm(`"${record.title}" 독서 기록을 삭제할까요?`)) return;
+    try {
+      const { error } = await supabaseClient.rpc("delete_book_reading", {
+        p_id: record.id,
+        p_child_id: child.id,
+        p_child_token: childSession.token,
+      });
+      if (error) throw error;
+      if (editingReadingId === record.id) resetReadingForm();
+      await loadReadingRecords();
+    } catch (error) {
+      console.error("독서 기록을 삭제하지 못했습니다.", error);
+      if (error.message.includes("session has expired")) {
+        childSession = null;
+        renderDashboard();
+      }
+      setReadingMessage(`기록을 삭제하지 못했습니다. ${error.message}`, true);
+    } finally {
+      renderReadingAccess();
+    }
+  });
 
   function createScheduleRow(task = null) {
     const childOptions = state.children.map((child) => `
@@ -390,6 +682,211 @@
     elements.selectAllSchedules.indeterminate = selectedIds.size > 0 && selectedIds.size < tasks.length;
     elements.deleteSelectedSchedulesButton.disabled = selectedIds.size === 0;
   }
+
+  function updateAdminSections() {
+    const schedulesSelected = activeAdminSection === "schedules";
+    const calendarSelected = activeAdminSection === "calendar";
+    elements.adminSchedulesTab.setAttribute("aria-selected", String(schedulesSelected));
+    elements.adminCalendarTab.setAttribute("aria-selected", String(calendarSelected));
+    elements.adminStarsTab.setAttribute("aria-selected", String(activeAdminSection === "stars"));
+    elements.scheduleManager.hidden = !schedulesSelected;
+    elements.readingCalendarPanel.hidden = !calendarSelected;
+    elements.deductionPanel.hidden = activeAdminSection !== "stars";
+  }
+
+  function renderDeductionPanel() {
+    const previousChildId = elements.deductionChild.value;
+    elements.deductionChild.innerHTML = state.children.map((child) =>
+      `<option value="${escapeHtml(child.id)}">${escapeHtml(child.name)}</option>`
+    ).join("");
+    if (state.children.some((child) => child.id === previousChildId)) {
+      elements.deductionChild.value = previousChildId;
+    }
+    const childId = elements.deductionChild.value;
+    const balance = childId ? getTotalStars(childId) : 0;
+    elements.deductionBalance.textContent = String(balance);
+    elements.deductionStars.max = String(balance);
+    elements.deductionChild.disabled = state.children.length === 0;
+    elements.deductionStars.disabled = state.children.length === 0 || balance === 0;
+    elements.deductionReason.disabled = state.children.length === 0 || balance === 0;
+    elements.deductionSubmit.disabled = state.children.length === 0 || balance === 0;
+
+    if (state.deductionHistory.length === 0) {
+      elements.deductionHistory.innerHTML = '<p class="schedule-empty">아직 별 차감 내역이 없어요.</p>';
+      return;
+    }
+    elements.deductionHistory.innerHTML = state.deductionHistory.map((entry) => {
+      const child = state.children.find((item) => item.id === entry.child_id);
+      const date = new Intl.DateTimeFormat("ko-KR", {
+        year: "numeric", month: "long", day: "numeric",
+      }).format(new Date(entry.created_at));
+      return `
+        <article class="deduction-history-item">
+          <div>
+            <strong>${escapeHtml(child?.name ?? "삭제된 자녀")} · −${Number(entry.stars)}개</strong>
+            <span>${escapeHtml(date)}</span>
+          </div>
+          <p>${escapeHtml(entry.reason)}</p>
+        </article>`;
+    }).join("");
+  }
+
+  function calendarDateString(year, month, day) {
+    return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
+
+  function renderReadingCalendar(records = []) {
+    const year = calendarMonth.getFullYear();
+    const month = calendarMonth.getMonth();
+    const lastDay = new Date(year, month + 1, 0).getDate();
+    const firstWeekday = new Date(year, month, 1).getDay();
+    const recordsByDate = {};
+    records.forEach((record) => {
+      recordsByDate[record.reading_date] ??= [];
+      recordsByDate[record.reading_date].push(record);
+    });
+    const colorForChild = (childId) => {
+      const index = state.children.findIndex((child) => child.id === childId);
+      return CALENDAR_CHILD_COLORS[(index < 0 ? 0 : index) % CALENDAR_CHILD_COLORS.length];
+    };
+
+    elements.calendarMonthLabel.textContent = new Intl.DateTimeFormat("ko-KR", {
+      year: "numeric", month: "long",
+    }).format(calendarMonth);
+    elements.calendarLegend.innerHTML = state.children.map((child) => {
+      const color = colorForChild(child.id);
+      return `<span class="calendar-legend-item"><i style="--child-color:${color}" aria-hidden="true"></i>${escapeHtml(child.name)}</span>`;
+    }).join("");
+    const headings = WEEKDAY_NAMES.map((weekday) =>
+      `<div class="calendar-weekday" role="columnheader">${weekday}</div>`
+    ).join("");
+    const blanks = Array.from({ length: firstWeekday }, () =>
+      '<div class="calendar-day is-outside" role="gridcell" aria-hidden="true"></div>'
+    ).join("");
+    const days = Array.from({ length: lastDay }, (_, index) => {
+      const day = index + 1;
+      const dateString = calendarDateString(year, month, day);
+      const books = (recordsByDate[dateString] ?? []).map((record) => `
+        <div class="calendar-book" style="--child-color:${colorForChild(record.child_id)}" title="${escapeHtml(`[${state.children.find((child) => child.id === record.child_id)?.name ?? "삭제된 자녀"}]${record.title}`)}">
+          <span>[${escapeHtml(state.children.find((child) => child.id === record.child_id)?.name ?? "삭제된 자녀")}]</span>${escapeHtml(record.title)}
+        </div>`).join("");
+      return `
+        <div class="calendar-day" role="gridcell" aria-label="${escapeHtml(dateString)}">
+          <span class="calendar-day-number">${day}</span>
+          <div class="calendar-books">${books || '<span class="calendar-no-books">-</span>'}</div>
+        </div>`;
+    }).join("");
+    elements.readingCalendar.innerHTML = `${headings}${blanks}${days}`;
+  }
+
+  async function loadReadingCalendar() {
+    const requestId = ++calendarRecordsRequestId;
+    const year = calendarMonth.getFullYear();
+    const month = calendarMonth.getMonth();
+    const startDate = calendarDateString(year, month, 1);
+    const nextMonth = new Date(year, month + 1, 1);
+    const endDate = calendarDateString(nextMonth.getFullYear(), nextMonth.getMonth(), 1);
+    elements.calendarMessage.hidden = true;
+    renderReadingCalendar();
+    if (!supabaseClient) {
+      elements.calendarMessage.textContent = "Supabase 연결 설정을 확인해 주세요.";
+      elements.calendarMessage.hidden = false;
+      return;
+    }
+    try {
+      const { data, error } = await supabaseClient
+        .from("book_reading_records")
+        .select("child_id, reading_date, title")
+        .gte("reading_date", startDate)
+        .lt("reading_date", endDate)
+        .order("reading_date", { ascending: true });
+      if (error) throw error;
+      if (requestId !== calendarRecordsRequestId) return;
+      renderReadingCalendar(data);
+    } catch (error) {
+      if (requestId !== calendarRecordsRequestId) return;
+      console.error("월간 독서 기록을 불러오지 못했습니다.", error);
+      elements.calendarMessage.textContent = `월간 독서 기록을 불러오지 못했습니다. ${error.message}`;
+      elements.calendarMessage.hidden = false;
+    }
+  }
+
+  async function selectAdminSection(section) {
+    if (currentView !== "admin") return;
+    activeAdminSection = section;
+    updateAdminSections();
+    if (section === "calendar") await loadReadingCalendar();
+    if (section === "stars") {
+      try {
+        await loadDeductionHistory();
+      } catch (error) {
+        console.error("별 차감 내역을 불러오지 못했습니다.", error);
+        elements.deductionMessage.textContent = `차감 내역을 불러오지 못했습니다. ${error.message}`;
+        elements.deductionMessage.classList.add("is-error");
+        elements.deductionMessage.hidden = false;
+      }
+    }
+  }
+
+  elements.adminSchedulesTab.addEventListener("click", () => selectAdminSection("schedules"));
+  elements.adminCalendarTab.addEventListener("click", () => selectAdminSection("calendar"));
+  elements.adminStarsTab.addEventListener("click", () => selectAdminSection("stars"));
+  $("#previous-calendar-month").addEventListener("click", () => {
+    calendarMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1);
+    if (currentView === "admin" && activeAdminSection === "calendar") loadReadingCalendar();
+  });
+  $("#next-calendar-month").addEventListener("click", () => {
+    calendarMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1);
+    if (currentView === "admin" && activeAdminSection === "calendar") loadReadingCalendar();
+  });
+  elements.deductionChild.addEventListener("change", renderDeductionPanel);
+
+  elements.deductionForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (currentView !== "admin") return;
+    const childId = elements.deductionChild.value;
+    const stars = Number(elements.deductionStars.value);
+    const reason = elements.deductionReason.value.trim();
+    const balance = getTotalStars(childId);
+    if (!state.children.some((child) => child.id === childId) ||
+        !Number.isInteger(stars) || stars < 1 || stars > balance ||
+        !reason || reason.length > 500) {
+      elements.deductionMessage.textContent = "자녀, 보유 별 이내의 차감 개수, 차감 사유를 확인해 주세요.";
+      elements.deductionMessage.classList.add("is-error");
+      elements.deductionMessage.hidden = false;
+      return;
+    }
+    elements.deductionSubmit.disabled = true;
+    elements.deductionMessage.hidden = true;
+    try {
+      const { error } = await supabaseClient.rpc("admin_deduct_child_stars", {
+        p_child_id: childId,
+        p_stars: stars,
+        p_reason: reason,
+      });
+      if (error) throw error;
+      elements.deductionForm.reset();
+      try {
+        await loadStarDeductions();
+        await loadDeductionHistory();
+        elements.deductionMessage.textContent = `${stars}개의 별을 차감했습니다.`;
+        elements.deductionMessage.classList.remove("is-error");
+      } catch (error) {
+        console.error("차감한 별 정보를 새로고침하지 못했습니다.", error);
+        elements.deductionMessage.textContent = `차감은 저장했지만 화면 갱신에 실패했습니다. 페이지를 새로고침해 주세요. ${error.message}`;
+        elements.deductionMessage.classList.add("is-error");
+      }
+      elements.deductionMessage.hidden = false;
+      renderDashboard();
+    } catch (error) {
+      console.error("자녀 별을 차감하지 못했습니다.", error);
+      elements.deductionMessage.textContent = `별 차감에 실패했습니다. ${error.message}`;
+      elements.deductionMessage.classList.add("is-error");
+      elements.deductionMessage.hidden = false;
+    } finally {
+      renderDeductionPanel();
+    }
+  });
 
   function updateScheduleSelection() {
     const checkboxes = Array.from(elements.scheduleList.querySelectorAll("[data-schedule-select]"));
@@ -630,7 +1127,9 @@
     const doneCount = applicableTasks.filter((task) => completions[task.id]).length;
 
     elements.childNameHeading.textContent = child.name;
+    elements.readingChildName.textContent = child.name;
     elements.selectedDateLabel.textContent = formattedDate;
+    elements.readingDateLabel.textContent = formattedDate;
     elements.taskProgress.textContent = applicableTasks.length
       ? `${applicableTasks.length}개의 할 일 중 ${doneCount}개 완료`
       : "이 날 예정된 할 일이 없어요.";
@@ -639,15 +1138,15 @@
     const childIsAuthenticated = childSession?.childId === child.id;
     elements.childAccess.hidden = currentView !== "child";
     elements.childAccessStatus.textContent = childIsAuthenticated
-      ? `${child.name}님, 할 일을 체크할 수 있어요.`
-      : "PIN을 입력하면 할 일을 체크할 수 있어요.";
+      ? `${child.name}님, 할 일과 독서 기록을 입력할 수 있어요.`
+      : "PIN을 입력하면 할 일과 독서 기록을 입력할 수 있어요.";
     elements.childUnlockButton.hidden = childIsAuthenticated;
     elements.childChangePinButton.hidden = !childIsAuthenticated;
     elements.childLockButton.hidden = !childIsAuthenticated;
     elements.childViewHint.hidden = currentView !== "child";
     elements.childViewHint.textContent = childIsAuthenticated
-      ? "할 일을 완료하고 별을 모아 보세요!"
-      : "PIN 입력 전에는 할 일 체크가 잠겨 있어요.";
+      ? "할 일을 완료하고 독서 기록을 남겨 보세요!"
+      : "PIN 입력 후 할 일 완료와 독서 기록 입력이 가능해요.";
     elements.emptyTasks.hidden = tasks.length > 0;
     elements.taskList.hidden = applicableTasks.length === 0;
 
@@ -669,6 +1168,8 @@
           </div>
         </article>`;
     }).join("");
+    renderReadingAccess();
+    renderReadingRecords();
   }
 
   function openChildDialog(childId = null) {
@@ -711,9 +1212,13 @@
   elements.childTabs.addEventListener("click", async (event) => {
     const tab = event.target.closest("[data-child-id]");
     if (!tab) return;
-    if (selectedChildId !== tab.dataset.childId) await lockChildSession();
+    if (selectedChildId !== tab.dataset.childId) {
+      await lockChildSession();
+      resetReadingForm();
+    }
     selectedChildId = tab.dataset.childId;
     renderChildren();
+    await loadReadingRecords();
   });
 
   document.querySelectorAll("[data-view]").forEach((button) => {
@@ -741,6 +1246,7 @@
       currentView = button.dataset.view;
       await lockChildSession();
       renderChildren();
+      await loadReadingRecords();
     });
   });
 
@@ -851,7 +1357,13 @@
   $('[data-action="add-child"]').addEventListener("click", () => {
     if (currentView === "admin") openChildDialog();
   });
-  elements.selectedDate.addEventListener("change", renderDashboard);
+  async function refreshSelectedDate() {
+    resetReadingForm();
+    renderDashboard();
+    await loadReadingRecords();
+  }
+
+  elements.selectedDate.addEventListener("change", refreshSelectedDate);
 
   function moveSelectedDate(offset) {
     if (!elements.selectedDate.value) return;
@@ -859,14 +1371,14 @@
     const date = new Date(year, month - 1, day + offset, 12);
     const nextValue = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
     elements.selectedDate.value = nextValue;
-    renderDashboard();
+    refreshSelectedDate();
   }
 
   $("#previous-day-button").addEventListener("click", () => moveSelectedDate(-1));
   $("#next-day-button").addEventListener("click", () => moveSelectedDate(1));
   $("#today-button").addEventListener("click", () => {
     elements.selectedDate.value = todayString();
-    renderDashboard();
+    refreshSelectedDate();
   });
 
   elements.taskForm.addEventListener("change", (event) => {
