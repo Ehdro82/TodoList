@@ -237,6 +237,104 @@ create policy "Completions are readable"
 grant select on public.task_completions to anon, authenticated;
 revoke insert, update, delete on public.task_completions from anon, authenticated;
 
+create table if not exists public.star_deductions (
+  id uuid primary key default extensions.gen_random_uuid(),
+  child_id text not null,
+  stars integer not null check (stars > 0),
+  reason text not null check (char_length(btrim(reason)) between 1 and 500),
+  created_at timestamptz not null default now()
+);
+
+create index if not exists star_deductions_child_created_idx
+  on public.star_deductions (child_id, created_at desc);
+
+alter table public.star_deductions enable row level security;
+
+drop policy if exists "Star deductions are readable" on public.star_deductions;
+create policy "Star deductions are readable"
+  on public.star_deductions for select
+  to authenticated
+  using (
+    coalesce(lower(auth.jwt() ->> 'email'), '') = lower('ADMIN_EMAIL_HERE')
+  );
+
+revoke all on public.star_deductions from public, anon, authenticated;
+grant select on public.star_deductions to authenticated;
+
+create or replace function public.get_child_star_deduction_totals()
+returns table (child_id text, stars bigint)
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  select deductions.child_id, sum(deductions.stars)
+    from public.star_deductions as deductions
+   group by deductions.child_id;
+$$;
+
+revoke all on function public.get_child_star_deduction_totals() from public;
+grant execute on function public.get_child_star_deduction_totals() to anon, authenticated;
+
+create or replace function public.admin_deduct_child_stars(
+  p_child_id text,
+  p_stars integer,
+  p_reason text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, extensions, pg_temp
+as $$
+declare
+  v_children jsonb;
+  v_earned_stars bigint;
+  v_deducted_stars bigint;
+  v_balance bigint;
+  v_deduction public.star_deductions;
+begin
+  if auth.uid() is null
+     or coalesce(lower(auth.jwt() ->> 'email'), '') <> lower('ADMIN_EMAIL_HERE') then
+    raise exception 'Only the configured administrator can deduct child stars.';
+  end if;
+  if p_child_id is null or p_stars is null or p_stars < 1
+     or p_reason is null or char_length(btrim(p_reason)) not between 1 and 500 then
+    raise exception 'A child, positive star amount, and reason (up to 500 characters) are required.';
+  end if;
+
+  select children
+    into v_children
+    from public.family_state
+   where id = 1
+   for update;
+  if not found or not exists (
+    select 1
+      from jsonb_array_elements(v_children) as children(child)
+     where child ->> 'id' = p_child_id
+  ) then
+    raise exception 'The selected child does not exist.';
+  end if;
+
+  select coalesce(sum(earned_stars), 0)
+    into v_earned_stars
+    from public.task_completions
+   where child_id = p_child_id;
+  select coalesce(sum(stars), 0)
+    into v_deducted_stars
+    from public.star_deductions
+   where child_id = p_child_id;
+  v_balance := greatest(0, v_earned_stars - v_deducted_stars);
+  if p_stars > v_balance then
+    raise exception 'The deduction exceeds the child''s current star balance (%).', v_balance;
+  end if;
+
+  insert into public.star_deductions (child_id, stars, reason)
+  values (p_child_id, p_stars, btrim(p_reason))
+  returning * into v_deduction;
+  return to_jsonb(v_deduction);
+end;
+$$;
+
 drop function if exists public.set_task_completion(text, text, date, boolean);
 
 create or replace function public.set_task_completion(
@@ -335,12 +433,14 @@ revoke all on function public.verify_child_pin(text, text) from public;
 revoke all on function public.change_child_pin(text, text, text) from public;
 revoke all on function public.lock_child_session(text, text) from public;
 revoke all on function public.set_task_completion(text, text, date, boolean, text) from public;
+revoke all on function public.admin_deduct_child_stars(text, integer, text) from public;
 grant execute on function public.admin_set_child_pin(text, text) to authenticated;
 grant execute on function public.admin_delete_child_pin(text) to authenticated;
 grant execute on function public.verify_child_pin(text, text) to anon, authenticated;
 grant execute on function public.change_child_pin(text, text, text) to anon, authenticated;
 grant execute on function public.lock_child_session(text, text) to anon, authenticated;
 grant execute on function public.set_task_completion(text, text, date, boolean, text) to anon, authenticated;
+grant execute on function public.admin_deduct_child_stars(text, integer, text) to authenticated;
 
 create table if not exists public.book_reading_records (
   id uuid primary key default extensions.gen_random_uuid(),
