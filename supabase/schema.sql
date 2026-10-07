@@ -242,8 +242,22 @@ create table if not exists public.star_deductions (
   child_id text not null,
   stars integer not null check (stars > 0),
   reason text not null check (char_length(btrim(reason)) between 1 and 500),
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  deduction_date date not null default (now() at time zone 'Asia/Seoul')::date,
+  cancelled_at timestamptz
 );
+
+alter table public.star_deductions
+  add column if not exists deduction_date date,
+  add column if not exists cancelled_at timestamptz;
+
+update public.star_deductions
+   set deduction_date = (created_at at time zone 'Asia/Seoul')::date
+ where deduction_date is null;
+
+alter table public.star_deductions
+  alter column deduction_date set default (now() at time zone 'Asia/Seoul')::date,
+  alter column deduction_date set not null;
 
 create index if not exists star_deductions_child_created_idx
   on public.star_deductions (child_id, created_at desc);
@@ -270,6 +284,7 @@ set search_path = public, pg_temp
 as $$
   select deductions.child_id, sum(deductions.stars)
     from public.star_deductions as deductions
+   where deductions.cancelled_at is null
    group by deductions.child_id;
 $$;
 
@@ -322,7 +337,8 @@ begin
   select coalesce(sum(stars), 0)
     into v_deducted_stars
     from public.star_deductions
-   where child_id = p_child_id;
+   where child_id = p_child_id
+   and cancelled_at is null;
   v_balance := greatest(0, v_earned_stars - v_deducted_stars);
   if p_stars > v_balance then
     raise exception 'The deduction exceeds the child''s current star balance (%).', v_balance;
@@ -330,6 +346,53 @@ begin
 
   insert into public.star_deductions (child_id, stars, reason)
   values (p_child_id, p_stars, btrim(p_reason))
+  returning * into v_deduction;
+  return to_jsonb(v_deduction);
+end;
+$$;
+
+create or replace function public.admin_cancel_child_star_deduction(
+  p_deduction_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_deduction public.star_deductions;
+begin
+  if auth.uid() is null
+     or coalesce(lower(auth.jwt() ->> 'email'), '') <> lower('ADMIN_EMAIL_HERE') then
+    raise exception 'Only the configured administrator can cancel child star deductions.';
+  end if;
+  if p_deduction_id is null then
+    raise exception 'A deduction ID is required.';
+  end if;
+
+  perform 1
+    from public.family_state
+   where id = 1
+   for update;
+  if not found then
+    raise exception 'Family state is not configured.';
+  end if;
+
+  select *
+    into v_deduction
+    from public.star_deductions
+   where id = p_deduction_id
+   for update;
+  if not found then
+    raise exception 'The selected star deduction does not exist.';
+  end if;
+  if v_deduction.cancelled_at is not null then
+    raise exception 'The selected star deduction has already been cancelled.';
+  end if;
+
+  update public.star_deductions
+     set cancelled_at = now()
+   where id = p_deduction_id
   returning * into v_deduction;
   return to_jsonb(v_deduction);
 end;
@@ -434,6 +497,7 @@ revoke all on function public.change_child_pin(text, text, text) from public;
 revoke all on function public.lock_child_session(text, text) from public;
 revoke all on function public.set_task_completion(text, text, date, boolean, text) from public;
 revoke all on function public.admin_deduct_child_stars(text, integer, text) from public;
+revoke all on function public.admin_cancel_child_star_deduction(uuid) from public;
 grant execute on function public.admin_set_child_pin(text, text) to authenticated;
 grant execute on function public.admin_delete_child_pin(text) to authenticated;
 grant execute on function public.verify_child_pin(text, text) to anon, authenticated;
@@ -441,6 +505,7 @@ grant execute on function public.change_child_pin(text, text, text) to anon, aut
 grant execute on function public.lock_child_session(text, text) to anon, authenticated;
 grant execute on function public.set_task_completion(text, text, date, boolean, text) to anon, authenticated;
 grant execute on function public.admin_deduct_child_stars(text, integer, text) to authenticated;
+grant execute on function public.admin_cancel_child_star_deduction(uuid) to authenticated;
 
 create table if not exists public.book_reading_records (
   id uuid primary key default extensions.gen_random_uuid(),
