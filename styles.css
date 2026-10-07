@@ -59,12 +59,12 @@ button { cursor: pointer; }
 .section-tab { min-height: 34px; padding: 0 15px; border: 0; border-radius: 7px; background: transparent; color: #858397; font-size: 11px; font-weight: 700; }
 .section-tab[aria-selected="true"] { background: white; color: var(--purple); box-shadow: 0 1px 4px #34304a12; }
 .section-tab:focus-visible { outline: 2px solid var(--purple); outline-offset: 2px; }
-.child-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 54px; border-bottom: 1px solid #eae9f1; }
+.child-submenu { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 52px; margin: 0 0 12px 12px; padding: 7px 9px; border: 1px solid #e8e6f2; border-radius: 11px; background: #fff; box-shadow: inset 3px 0 0 #d9d4fb; }
 .child-tabs { display: flex; align-self: stretch; gap: 8px; overflow-x: auto; }
 .child-actions { display: flex; gap: 5px; margin-left: auto; }
-.child-tab { position: relative; min-width: 66px; padding: 0 12px; border: 0; background: transparent; color: #8c8b9e; font-size: 13px; font-weight: 600; }
-.child-tab[aria-selected="true"] { color: var(--purple); }
-.child-tab[aria-selected="true"]::after { position: absolute; right: 10px; bottom: -1px; left: 10px; height: 3px; border-radius: 3px 3px 0 0; background: var(--purple); content: ""; }
+.child-tab { min-width: 66px; min-height: 34px; padding: 0 12px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: #858397; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.child-tab[aria-selected="true"] { border-color: #e2defb; background: var(--purple-soft); color: var(--purple-dark); font-weight: 700; }
+.child-tab:focus-visible { outline: 2px solid var(--purple); outline-offset: 2px; }
 .button { display: inline-flex; min-height: 39px; align-items: center; justify-content: center; gap: 6px; padding: 0 15px; border: 0; border-radius: 9px; font-size: 12px; font-weight: 700; transition: transform .15s ease, background .15s ease; }
 .button:active { transform: scale(.98); }
 .button-quiet { border: 1px solid #e9e8f1; background: white; color: #77768a; }
@@ -212,6 +212,7 @@ button { cursor: pointer; }
 .deduction-history { display: grid; gap: 8px; }
 .deduction-history-item { padding: 11px 13px; border: 1px solid #eeedf4; border-radius: 9px; }
 .deduction-history-item > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.deduction-cancel-button { min-height: 30px; flex: 0 0 auto; padding: 0 9px; color: #9c5865; font-size: 10px; }
 .deduction-history-item strong { color: #49475e; font-size: 11px; }
 .deduction-history-item span { color: #9695a8; font-size: 9px; }
 .deduction-history-item p { margin: 6px 0 0; color: #77768a; font-size: 10px; overflow-wrap: anywhere; }
@@ -284,9 +285,9 @@ button { cursor: pointer; }
   .reading-form { padding: 13px 11px; }
   .reading-record { gap: 8px; padding: 10px; }
   .reading-record-action { padding: 6px 5px; }
-  .child-bar { gap: 6px; }
+  .child-submenu { gap: 6px; margin-left: 8px; padding: 6px; }
   .child-tab { min-width: 55px; padding: 0 9px; font-size: 12px; }
-  .child-bar > .button, .child-actions .button { min-height: 34px; padding: 0 8px; white-space: nowrap; font-size: 10px; }
+  .child-submenu > .button, .child-actions .button { min-height: 34px; padding: 0 8px; white-space: nowrap; font-size: 10px; }
   .summary-row { padding-top: 21px; }
   .star-total { min-width: 0; gap: 5px; padding: 9px; }
   .star-total-label { font-size: 10px; }
@@ -330,7 +331,7 @@ button { cursor: pointer; }
   .welcome-description { max-width: 225px; }
   .welcome-art { position: absolute; right: 1px; width: 92px; opacity: .85; }
   .welcome-copy { position: relative; z-index: 1; }
-  .child-bar { flex-wrap: wrap; padding: 7px 0; }
+  .child-submenu { flex-wrap: wrap; padding: 6px; }
   .child-tabs { min-width: 100%; min-height: 37px; }
   .child-actions { margin-left: auto; }
   .task-title { max-width: 115px; }

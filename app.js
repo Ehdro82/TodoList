@@ -63,6 +63,7 @@
     readingCalendar: $("#reading-calendar"),
     calendarMessage: $("#calendar-message"),
     deductionPanel: $("#star-deduction-panel"),
+    deductionHistory: $("#deduction-history"),
     deductionForm: $("#star-deduction-form"),
     deductionChild: $("#deduction-child"),
     deductionBalance: $("#deduction-balance"),
@@ -209,7 +210,7 @@
   async function loadDeductionHistory() {
     const { data, error } = await supabaseClient
       .from("star_deductions")
-      .select("id, child_id, stars, reason, created_at")
+      .select("id, child_id, stars, reason, created_at, deduction_date, cancelled_at")
       .order("created_at", { ascending: false });
     if (error) throw error;
     state.deductionHistory = data;
@@ -717,15 +718,20 @@
     }
     elements.deductionHistory.innerHTML = state.deductionHistory.map((entry) => {
       const child = state.children.find((item) => item.id === entry.child_id);
-      const date = new Intl.DateTimeFormat("ko-KR", {
+      const formatDate = (date) => new Intl.DateTimeFormat("ko-KR", {
         year: "numeric", month: "long", day: "numeric",
-      }).format(new Date(entry.created_at));
+      }).format(date);
+      const deductionDate = formatDate(new Date(`${entry.deduction_date}T12:00:00`));
+      const cancelledDate = entry.cancelled_at
+        ? formatDate(new Date(entry.cancelled_at))
+        : null;
       return `
         <article class="deduction-history-item">
           <div>
             <strong>${escapeHtml(child?.name ?? "삭제된 자녀")} · −${Number(entry.stars)}개</strong>
-            <span>${escapeHtml(date)}</span>
+            <span>차감일 ${escapeHtml(deductionDate)}${cancelledDate ? ` · 취소됨 ${escapeHtml(cancelledDate)}` : ""}</span>
           </div>
+          ${entry.cancelled_at ? "" : `<button class="button button-quiet deduction-cancel-button" type="button" data-deduction-id="${escapeHtml(entry.id)}">차감 취소</button>`}
           <p>${escapeHtml(entry.reason)}</p>
         </article>`;
     }).join("");
@@ -840,6 +846,42 @@
     if (currentView === "admin" && activeAdminSection === "calendar") loadReadingCalendar();
   });
   elements.deductionChild.addEventListener("change", renderDeductionPanel);
+  elements.deductionHistory.addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-deduction-id]");
+    if (!button || currentView !== "admin") return;
+    const deduction = state.deductionHistory.find((entry) => entry.id === button.dataset.deductionId);
+    if (!deduction || deduction.cancelled_at) return;
+    const child = state.children.find((item) => item.id === deduction.child_id);
+    const childName = child?.name ?? "삭제된 자녀";
+    if (!window.confirm(`${childName}의 별 ${Number(deduction.stars)}개 차감을 취소할까요?`)) return;
+
+    button.disabled = true;
+    elements.deductionMessage.hidden = true;
+    try {
+      const { error } = await supabaseClient.rpc("admin_cancel_child_star_deduction", {
+        p_deduction_id: deduction.id,
+      });
+      if (error) throw error;
+      try {
+        await loadStarDeductions();
+        await loadDeductionHistory();
+        elements.deductionMessage.textContent = `${childName}의 별 차감을 취소했습니다.`;
+        elements.deductionMessage.classList.remove("is-error");
+        renderDashboard();
+      } catch (error) {
+        console.error("취소한 별 차감 정보를 새로고침하지 못했습니다.", error);
+        elements.deductionMessage.textContent = `차감 취소는 저장했지만 화면 갱신에 실패했습니다. 페이지를 새로고침해 주세요. ${error.message}`;
+        elements.deductionMessage.classList.add("is-error");
+      }
+    } catch (error) {
+      console.error("별 차감을 취소하지 못했습니다.", error);
+      elements.deductionMessage.textContent = `별 차감 취소에 실패했습니다. ${error.message}`;
+      elements.deductionMessage.classList.add("is-error");
+    } finally {
+      elements.deductionMessage.hidden = false;
+      renderDeductionPanel();
+    }
+  });
 
   elements.deductionForm.addEventListener("submit", async (event) => {
     event.preventDefault();
