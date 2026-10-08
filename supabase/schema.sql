@@ -321,9 +321,9 @@ begin
      or coalesce(lower(auth.jwt() ->> 'email'), '') <> lower('ADMIN_EMAIL_HERE') then
     raise exception 'Only the configured administrator can deduct child stars.';
   end if;
-  if p_child_id is null or p_stars is null or p_stars < 1
+  if p_child_id is null or p_stars is null or p_stars not between 1 and 999
      or p_reason is null or char_length(btrim(p_reason)) not between 1 and 500 then
-    raise exception 'A child, positive star amount, and reason (up to 500 characters) are required.';
+    raise exception 'A child, 1-999 stars, and a reason (up to 500 characters) are required.';
   end if;
 
   select children
@@ -382,10 +382,10 @@ begin
      or coalesce(lower(auth.jwt() ->> 'email'), '') <> lower('ADMIN_EMAIL_HERE') then
     raise exception 'Only the configured administrator can manage child stars.';
   end if;
-  if p_child_id is null or p_stars is null or p_stars not between 1 and 99
+  if p_child_id is null or p_stars is null or p_stars not between 1 and 999
      or p_adjustment_type is null or p_adjustment_type not in ('deduction', 'grant')
      or p_reason is null or char_length(btrim(p_reason)) not between 1 and 500 then
-    raise exception 'A child, 1-99 stars, a valid adjustment type, and a reason (up to 500 characters) are required.';
+    raise exception 'A child, 1-999 stars, a valid adjustment type, and a reason (up to 500 characters) are required.';
   end if;
 
   select children
