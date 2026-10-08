@@ -715,7 +715,7 @@
     const balance = childId ? getTotalStars(childId) : 0;
     const isGrant = elements.adjustmentType.value === "grant";
     elements.deductionBalance.textContent = String(balance);
-    elements.deductionStars.max = isGrant ? "99" : String(balance);
+    elements.deductionStars.max = isGrant ? "999" : String(Math.min(balance, 999));
     elements.deductionChild.disabled = state.children.length === 0;
     elements.deductionStars.disabled = state.children.length === 0 || (!isGrant && balance === 0);
     elements.deductionReason.disabled = state.children.length === 0;
@@ -985,11 +985,11 @@
     const balance = getTotalStars(childId);
     if (!state.children.some((child) => child.id === childId) ||
         !["deduction", "grant"].includes(adjustmentType) ||
-        !Number.isInteger(stars) || stars < 1 || stars > 99 ||
+        !Number.isInteger(stars) || stars < 1 || stars > 999 ||
         (adjustmentType === "deduction" && stars > balance) ||
         !reason || reason.length > 500) {
       elements.deductionMessage.textContent = adjustmentType === "grant"
-        ? "자녀, 1~99개의 부여 개수, 부여 사유를 확인해 주세요."
+        ? "자녀, 1~999개의 부여 개수, 부여 사유를 확인해 주세요."
         : "자녀, 보유 별 이내의 차감 개수, 차감 사유를 확인해 주세요.";
       elements.deductionMessage.classList.add("is-error");
       elements.deductionMessage.hidden = false;
