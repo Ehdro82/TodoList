@@ -242,6 +242,7 @@ create table if not exists public.star_deductions (
   child_id text not null,
   stars integer not null check (stars > 0),
   reason text not null check (char_length(btrim(reason)) between 1 and 500),
+  adjustment_type text not null default 'deduction',
   created_at timestamptz not null default now(),
   deduction_date date not null default (now() at time zone 'Asia/Seoul')::date,
   cancelled_at timestamptz
@@ -249,7 +250,14 @@ create table if not exists public.star_deductions (
 
 alter table public.star_deductions
   add column if not exists deduction_date date,
+  add column if not exists adjustment_type text not null default 'deduction',
   add column if not exists cancelled_at timestamptz;
+
+alter table public.star_deductions
+  drop constraint if exists star_deductions_adjustment_type_check;
+alter table public.star_deductions
+  add constraint star_deductions_adjustment_type_check
+  check (adjustment_type in ('deduction', 'grant'));
 
 update public.star_deductions
    set deduction_date = (created_at at time zone 'Asia/Seoul')::date
@@ -282,7 +290,8 @@ stable
 security definer
 set search_path = public, pg_temp
 as $$
-  select deductions.child_id, sum(deductions.stars)
+  select deductions.child_id,
+         sum(case when deductions.adjustment_type = 'deduction' then deductions.stars else -deductions.stars end)
     from public.star_deductions as deductions
    where deductions.cancelled_at is null
    group by deductions.child_id;
@@ -334,7 +343,7 @@ begin
     into v_earned_stars
     from public.task_completions
    where child_id = p_child_id;
-  select coalesce(sum(stars), 0)
+  select coalesce(sum(case when adjustment_type = 'deduction' then stars else -stars end), 0)
     into v_deducted_stars
     from public.star_deductions
    where child_id = p_child_id
@@ -348,6 +357,70 @@ begin
   values (p_child_id, p_stars, btrim(p_reason))
   returning * into v_deduction;
   return to_jsonb(v_deduction);
+end;
+$$;
+
+create or replace function public.admin_adjust_child_stars(
+  p_child_id text,
+  p_stars integer,
+  p_reason text,
+  p_adjustment_type text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, extensions, pg_temp
+as $$
+declare
+  v_children jsonb;
+  v_earned_stars bigint;
+  v_net_adjustment bigint;
+  v_balance bigint;
+  v_adjustment public.star_deductions;
+begin
+  if auth.uid() is null
+     or coalesce(lower(auth.jwt() ->> 'email'), '') <> lower('ADMIN_EMAIL_HERE') then
+    raise exception 'Only the configured administrator can manage child stars.';
+  end if;
+  if p_child_id is null or p_stars is null or p_stars not between 1 and 99
+     or p_adjustment_type is null or p_adjustment_type not in ('deduction', 'grant')
+     or p_reason is null or char_length(btrim(p_reason)) not between 1 and 500 then
+    raise exception 'A child, 1-99 stars, a valid adjustment type, and a reason (up to 500 characters) are required.';
+  end if;
+
+  select children
+    into v_children
+    from public.family_state
+   where id = 1
+   for update;
+  if not found or not exists (
+    select 1
+      from jsonb_array_elements(v_children) as children(child)
+     where child ->> 'id' = p_child_id
+  ) then
+    raise exception 'The selected child does not exist.';
+  end if;
+
+  if p_adjustment_type = 'deduction' then
+    select coalesce(sum(earned_stars), 0)
+      into v_earned_stars
+      from public.task_completions
+     where child_id = p_child_id;
+    select coalesce(sum(case when adjustment_type = 'deduction' then stars else -stars end), 0)
+      into v_net_adjustment
+      from public.star_deductions
+     where child_id = p_child_id
+       and cancelled_at is null;
+    v_balance := greatest(0, v_earned_stars - v_net_adjustment);
+    if p_stars > v_balance then
+      raise exception 'The deduction exceeds the child''s current star balance (%).', v_balance;
+    end if;
+  end if;
+
+  insert into public.star_deductions (child_id, stars, reason, adjustment_type)
+  values (p_child_id, p_stars, btrim(p_reason), p_adjustment_type)
+  returning * into v_adjustment;
+  return to_jsonb(v_adjustment);
 end;
 $$;
 
@@ -395,6 +468,51 @@ begin
    where id = p_deduction_id
   returning * into v_deduction;
   return to_jsonb(v_deduction);
+end;
+$$;
+
+create or replace function public.get_child_star_adjustment_history(
+  p_child_id text,
+  p_start_date date,
+  p_end_date date
+)
+returns table (
+  stars integer,
+  adjustment_type text,
+  adjustment_date date,
+  cancelled_at timestamptz,
+  reason text
+)
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  if p_child_id is null or p_start_date is null or p_end_date is null
+     or p_end_date <= p_start_date or p_end_date - p_start_date > 32 then
+    raise exception 'A child and a valid date range of at most 32 days are required.';
+  end if;
+  if not exists (
+    select 1
+      from public.family_state
+      cross join lateral jsonb_array_elements(children) as child(value)
+     where id = 1 and child.value ->> 'id' = p_child_id
+  ) then
+    raise exception 'The selected child does not exist.';
+  end if;
+
+  return query
+  select adjustments.stars,
+         adjustments.adjustment_type,
+         adjustments.deduction_date,
+         adjustments.cancelled_at,
+         adjustments.reason
+    from public.star_deductions as adjustments
+   where adjustments.child_id = p_child_id
+     and adjustments.deduction_date >= p_start_date
+     and adjustments.deduction_date < p_end_date
+   order by adjustments.deduction_date desc, adjustments.created_at desc;
 end;
 $$;
 
@@ -497,7 +615,9 @@ revoke all on function public.change_child_pin(text, text, text) from public;
 revoke all on function public.lock_child_session(text, text) from public;
 revoke all on function public.set_task_completion(text, text, date, boolean, text) from public;
 revoke all on function public.admin_deduct_child_stars(text, integer, text) from public;
+revoke all on function public.admin_adjust_child_stars(text, integer, text, text) from public;
 revoke all on function public.admin_cancel_child_star_deduction(uuid) from public;
+revoke all on function public.get_child_star_adjustment_history(text, date, date) from public;
 grant execute on function public.admin_set_child_pin(text, text) to authenticated;
 grant execute on function public.admin_delete_child_pin(text) to authenticated;
 grant execute on function public.verify_child_pin(text, text) to anon, authenticated;
@@ -505,7 +625,9 @@ grant execute on function public.change_child_pin(text, text, text) to anon, aut
 grant execute on function public.lock_child_session(text, text) to anon, authenticated;
 grant execute on function public.set_task_completion(text, text, date, boolean, text) to anon, authenticated;
 grant execute on function public.admin_deduct_child_stars(text, integer, text) to authenticated;
+grant execute on function public.admin_adjust_child_stars(text, integer, text, text) to authenticated;
 grant execute on function public.admin_cancel_child_star_deduction(uuid) to authenticated;
+grant execute on function public.get_child_star_adjustment_history(text, date, date) to anon, authenticated;
 
 create table if not exists public.book_reading_records (
   id uuid primary key default extensions.gen_random_uuid(),
