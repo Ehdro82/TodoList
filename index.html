@@ -92,7 +92,7 @@
                 <div class="star-total-values">
                   <strong id="weekly-stars">0</strong>
                   <span aria-hidden="true">/</span>
-                  <strong id="total-stars">0</strong>
+                  <button id="total-stars" class="star-total-history-button" type="button" aria-label="누적 별 기록 조회">0</button>
                 </div>
                 <span class="star-unit">개</span>
               </div>
@@ -172,7 +172,7 @@
           <nav class="section-tabs admin-section-tabs" role="tablist" aria-label="관리자 관리 항목">
             <button id="admin-schedules-tab" class="section-tab" type="button" role="tab" aria-selected="true" aria-controls="schedule-manager">전체 일정 목록</button>
             <button id="admin-calendar-tab" class="section-tab" type="button" role="tab" aria-selected="false" aria-controls="reading-calendar-panel">독서 캘린더</button>
-            <button id="admin-stars-tab" class="section-tab" type="button" role="tab" aria-selected="false" aria-controls="star-deduction-panel">별 차감</button>
+            <button id="admin-stars-tab" class="section-tab" type="button" role="tab" aria-selected="false" aria-controls="star-adjustment-panel">별 관리</button>
           </nav>
 
           <section id="schedule-manager" class="schedule-manager" role="tabpanel" aria-labelledby="admin-schedules-tab">
@@ -214,33 +214,40 @@
             <p id="calendar-message" class="schedule-error" role="status" hidden></p>
           </section>
 
-          <section id="star-deduction-panel" class="admin-panel schedule-manager" role="tabpanel" aria-labelledby="admin-stars-tab" hidden>
+          <section id="star-adjustment-panel" class="admin-panel schedule-manager" role="tabpanel" aria-labelledby="admin-stars-tab" hidden>
             <div class="schedule-heading">
               <div>
                 <p class="eyebrow">STAR BALANCE</p>
-                <h3>자녀 별 차감</h3>
-                <p class="schedule-description">차감일과 사유를 기록하며, 잘못 처리한 차감은 내역에서 취소할 수 있어요.</p>
+                <h3>자녀 별 관리</h3>
+                <p class="schedule-description">자녀별 누적 별을 부여하거나 차감하고, 처리 사유와 내역을 관리할 수 있어요.</p>
               </div>
             </div>
-            <form id="star-deduction-form" class="star-deduction-form">
+            <form id="star-adjustment-form" class="star-deduction-form">
               <label class="deduction-field">
                 <span>자녀</span>
                 <select id="deduction-child" class="text-input" required></select>
               </label>
               <div class="deduction-balance">현재 누적 별 <strong id="deduction-balance">0</strong>개</div>
               <label class="deduction-field">
-                <span>차감할 별</span>
-                <input id="deduction-stars" class="text-input" type="number" min="1" step="1" required />
+                <span>관리 종류</span>
+                <select id="adjustment-type" class="text-input" required>
+                  <option value="deduction">차감</option>
+                  <option value="grant">부여</option>
+                </select>
+              </label>
+              <label class="deduction-field">
+                <span id="adjustment-stars-label">차감할 별</span>
+                <input id="deduction-stars" class="text-input" type="number" min="1" max="99" step="1" required />
               </label>
               <label class="deduction-field deduction-reason-field">
-                <span>차감 사유</span>
-                <input id="deduction-reason" class="text-input" type="text" maxlength="500" placeholder="차감 사유를 입력해 주세요" required />
+                <span id="adjustment-reason-label">처리 사유</span>
+                <input id="deduction-reason" class="text-input" type="text" maxlength="500" placeholder="별 관리 사유를 입력해 주세요" required />
               </label>
-              <button id="deduction-submit" class="button button-primary" type="submit">별 차감 저장</button>
+              <button id="deduction-submit" class="button button-primary" type="submit">별 관리 저장</button>
             </form>
             <p id="deduction-message" class="deduction-message" role="status" hidden></p>
             <div class="deduction-history-heading">
-              <h4>차감 내역</h4>
+              <h4>별 관리 내역</h4>
             </div>
             <div id="deduction-history" class="deduction-history"></div>
           </section>
@@ -249,6 +256,20 @@
 
       <footer class="page-footer">작은 약속이 모여 큰 자신감이 돼요 <span aria-hidden="true">♥</span></footer>
     </main>
+
+    <dialog id="star-history-dialog" class="form-dialog star-history-dialog" aria-labelledby="star-history-title">
+      <div class="dialog-heading">
+        <div><p class="eyebrow">STAR HISTORY</p><h2 id="star-history-title">별 관리 내역</h2></div>
+        <button class="icon-button" type="button" data-close-dialog aria-label="닫기">×</button>
+      </div>
+      <div class="star-history-month-controls">
+        <button id="previous-star-history-month" class="date-nav-button" type="button" aria-label="이전 달">‹</button>
+        <strong id="star-history-month-label"></strong>
+        <button id="next-star-history-month" class="date-nav-button" type="button" aria-label="다음 달">›</button>
+      </div>
+      <p id="star-history-message" class="schedule-error" role="status" hidden></p>
+      <div id="star-history-list" class="star-history-list" aria-live="polite"></div>
+    </dialog>
 
     <dialog id="admin-pin-dialog" class="form-dialog pin-dialog">
       <form id="admin-pin-form">

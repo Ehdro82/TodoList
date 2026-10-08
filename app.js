@@ -62,16 +62,22 @@
     calendarLegend: $("#calendar-legend"),
     readingCalendar: $("#reading-calendar"),
     calendarMessage: $("#calendar-message"),
-    deductionPanel: $("#star-deduction-panel"),
+    deductionPanel: $("#star-adjustment-panel"),
     deductionHistory: $("#deduction-history"),
-    deductionForm: $("#star-deduction-form"),
+    deductionForm: $("#star-adjustment-form"),
     deductionChild: $("#deduction-child"),
     deductionBalance: $("#deduction-balance"),
     deductionStars: $("#deduction-stars"),
     deductionReason: $("#deduction-reason"),
     deductionSubmit: $("#deduction-submit"),
     deductionMessage: $("#deduction-message"),
-    deductionHistory: $("#deduction-history"),
+    adjustmentType: $("#adjustment-type"),
+    adjustmentStarsLabel: $("#adjustment-stars-label"),
+    adjustmentReasonLabel: $("#adjustment-reason-label"),
+    starHistoryDialog: $("#star-history-dialog"),
+    starHistoryMonthLabel: $("#star-history-month-label"),
+    starHistoryMessage: $("#star-history-message"),
+    starHistoryList: $("#star-history-list"),
     scheduleList: $("#schedule-list"),
     scheduleCount: $("#schedule-count"),
     selectAllSchedules: $("#select-all-schedules"),
@@ -144,6 +150,8 @@
   let activeAdminSection = "schedules";
   let calendarMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
   let calendarRecordsRequestId = 0;
+  let starHistoryMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+  let starHistoryRequestId = 0;
   elements.selectedDate.value = todayString();
 
   function getStateSnapshot() {
@@ -210,7 +218,7 @@
   async function loadDeductionHistory() {
     const { data, error } = await supabaseClient
       .from("star_deductions")
-      .select("id, child_id, stars, reason, created_at, deduction_date, cancelled_at")
+      .select("id, child_id, stars, reason, adjustment_type, created_at, deduction_date, cancelled_at")
       .order("created_at", { ascending: false });
     if (error) throw error;
     state.deductionHistory = data;
@@ -304,10 +312,10 @@
         }
       }
     }
-    const deducted = Number(
+    const netAdjustment = Number(
       state.starDeductions.find((entry) => entry.child_id === childId)?.stars,
     ) || 0;
-    return Math.max(0, total - deducted);
+    return Math.max(0, total - netAdjustment);
   }
 
   async function lockChildSession() {
@@ -705,15 +713,20 @@
     }
     const childId = elements.deductionChild.value;
     const balance = childId ? getTotalStars(childId) : 0;
+    const isGrant = elements.adjustmentType.value === "grant";
     elements.deductionBalance.textContent = String(balance);
-    elements.deductionStars.max = String(balance);
+    elements.deductionStars.max = isGrant ? "99" : String(balance);
     elements.deductionChild.disabled = state.children.length === 0;
-    elements.deductionStars.disabled = state.children.length === 0 || balance === 0;
-    elements.deductionReason.disabled = state.children.length === 0 || balance === 0;
-    elements.deductionSubmit.disabled = state.children.length === 0 || balance === 0;
+    elements.deductionStars.disabled = state.children.length === 0 || (!isGrant && balance === 0);
+    elements.deductionReason.disabled = state.children.length === 0;
+    elements.adjustmentType.disabled = state.children.length === 0;
+    elements.deductionSubmit.disabled = state.children.length === 0 || (!isGrant && balance === 0);
+    elements.adjustmentStarsLabel.textContent = isGrant ? "부여할 별" : "차감할 별";
+    elements.adjustmentReasonLabel.textContent = isGrant ? "부여 사유" : "차감 사유";
+    elements.deductionSubmit.textContent = isGrant ? "별 부여 저장" : "별 차감 저장";
 
     if (state.deductionHistory.length === 0) {
-      elements.deductionHistory.innerHTML = '<p class="schedule-empty">아직 별 차감 내역이 없어요.</p>';
+      elements.deductionHistory.innerHTML = '<p class="schedule-empty">아직 별 관리 내역이 없어요.</p>';
       return;
     }
     elements.deductionHistory.innerHTML = state.deductionHistory.map((entry) => {
@@ -725,13 +738,14 @@
       const cancelledDate = entry.cancelled_at
         ? formatDate(new Date(entry.cancelled_at))
         : null;
+      const isGrantEntry = entry.adjustment_type === "grant";
       return `
         <article class="deduction-history-item">
           <div>
-            <strong>${escapeHtml(child?.name ?? "삭제된 자녀")} · −${Number(entry.stars)}개</strong>
-            <span>차감일 ${escapeHtml(deductionDate)}${cancelledDate ? ` · 취소됨 ${escapeHtml(cancelledDate)}` : ""}</span>
+            <strong>${escapeHtml(child?.name ?? "삭제된 자녀")} · ${isGrantEntry ? "+" : "−"}${Number(entry.stars)}개${isGrantEntry ? " 부여" : " 차감"}</strong>
+            <span>${isGrantEntry ? "부여일" : "차감일"} ${escapeHtml(deductionDate)}${cancelledDate ? ` · 취소됨 ${escapeHtml(cancelledDate)}` : ""}</span>
           </div>
-          ${entry.cancelled_at ? "" : `<button class="button button-quiet deduction-cancel-button" type="button" data-deduction-id="${escapeHtml(entry.id)}">차감 취소</button>`}
+          ${entry.cancelled_at ? "" : `<button class="button button-quiet deduction-cancel-button" type="button" data-deduction-id="${escapeHtml(entry.id)}">${isGrantEntry ? "부여 취소" : "차감 취소"}</button>`}
           <p>${escapeHtml(entry.reason)}</p>
         </article>`;
     }).join("");
@@ -785,6 +799,72 @@
     elements.readingCalendar.innerHTML = `${headings}${blanks}${days}`;
   }
 
+  function renderStarHistory(records = []) {
+    elements.starHistoryMonthLabel.textContent = new Intl.DateTimeFormat("ko-KR", {
+      year: "numeric", month: "long",
+    }).format(starHistoryMonth);
+    if (records.length === 0) {
+      elements.starHistoryList.innerHTML = '<p class="reading-empty">이 달에는 관리자 별 관리 내역이 없어요.</p>';
+      return;
+    }
+    elements.starHistoryList.innerHTML = records.map((record) => {
+      const isGrant = record.adjustment_type === "grant";
+      const date = new Intl.DateTimeFormat("ko-KR", {
+        year: "numeric", month: "long", day: "numeric",
+      }).format(new Date(`${record.adjustment_date}T12:00:00`));
+      return `
+        <article class="star-history-item${record.cancelled_at ? " is-cancelled" : ""}">
+          <strong class="${isGrant ? "is-grant" : "is-deduction"}">${isGrant ? "+" : "−"}${Number(record.stars)}개 ${isGrant ? "부여" : "차감"}${record.cancelled_at ? " (취소됨)" : ""}</strong>
+          <span>${escapeHtml(date)}</span>
+          <p>${escapeHtml(record.reason)}</p>
+        </article>`;
+    }).join("");
+  }
+
+  async function loadStarHistory() {
+    const requestId = ++starHistoryRequestId;
+    const child = state.children.find((item) => item.id === selectedChildId);
+    const startDate = calendarDateString(starHistoryMonth.getFullYear(), starHistoryMonth.getMonth(), 1);
+    const nextMonth = new Date(starHistoryMonth.getFullYear(), starHistoryMonth.getMonth() + 1, 1);
+    const endDate = calendarDateString(nextMonth.getFullYear(), nextMonth.getMonth(), 1);
+    elements.starHistoryMessage.hidden = true;
+    elements.starHistoryList.innerHTML = '<p class="reading-empty">별 관리 내역을 불러오는 중이에요.</p>';
+    elements.starHistoryMonthLabel.textContent = new Intl.DateTimeFormat("ko-KR", {
+      year: "numeric", month: "long",
+    }).format(starHistoryMonth);
+    if (!child || !supabaseClient) {
+      elements.starHistoryMessage.textContent = child
+        ? "Supabase 연결 설정을 확인해 주세요."
+        : "조회할 자녀가 없습니다.";
+      elements.starHistoryMessage.hidden = false;
+      elements.starHistoryList.replaceChildren();
+      return;
+    }
+    try {
+      const { data, error } = await supabaseClient.rpc("get_child_star_adjustment_history", {
+        p_child_id: child.id,
+        p_start_date: startDate,
+        p_end_date: endDate,
+      });
+      if (error) throw error;
+      if (requestId !== starHistoryRequestId) return;
+      renderStarHistory(data);
+    } catch (error) {
+      if (requestId !== starHistoryRequestId) return;
+      console.error("월간 별 관리 내역을 불러오지 못했습니다.", error);
+      elements.starHistoryMessage.textContent = `별 관리 내역을 불러오지 못했습니다. ${error.message}`;
+      elements.starHistoryMessage.hidden = false;
+      elements.starHistoryList.replaceChildren();
+    }
+  }
+
+  async function openStarHistory() {
+    if (currentView !== "child" || !state.children.some((child) => child.id === selectedChildId)) return;
+    starHistoryMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    elements.starHistoryDialog.showModal();
+    await loadStarHistory();
+  }
+
   async function loadReadingCalendar() {
     const requestId = ++calendarRecordsRequestId;
     const year = calendarMonth.getFullYear();
@@ -826,8 +906,8 @@
       try {
         await loadDeductionHistory();
       } catch (error) {
-        console.error("별 차감 내역을 불러오지 못했습니다.", error);
-        elements.deductionMessage.textContent = `차감 내역을 불러오지 못했습니다. ${error.message}`;
+        console.error("별 관리 내역을 불러오지 못했습니다.", error);
+        elements.deductionMessage.textContent = `별 관리 내역을 불러오지 못했습니다. ${error.message}`;
         elements.deductionMessage.classList.add("is-error");
         elements.deductionMessage.hidden = false;
       }
@@ -846,6 +926,16 @@
     if (currentView === "admin" && activeAdminSection === "calendar") loadReadingCalendar();
   });
   elements.deductionChild.addEventListener("change", renderDeductionPanel);
+  elements.adjustmentType.addEventListener("change", renderDeductionPanel);
+  $("#total-stars").addEventListener("click", openStarHistory);
+  $("#previous-star-history-month").addEventListener("click", () => {
+    starHistoryMonth = new Date(starHistoryMonth.getFullYear(), starHistoryMonth.getMonth() - 1, 1);
+    loadStarHistory();
+  });
+  $("#next-star-history-month").addEventListener("click", () => {
+    starHistoryMonth = new Date(starHistoryMonth.getFullYear(), starHistoryMonth.getMonth() + 1, 1);
+    loadStarHistory();
+  });
   elements.deductionHistory.addEventListener("click", async (event) => {
     const button = event.target.closest("[data-deduction-id]");
     if (!button || currentView !== "admin") return;
@@ -853,7 +943,9 @@
     if (!deduction || deduction.cancelled_at) return;
     const child = state.children.find((item) => item.id === deduction.child_id);
     const childName = child?.name ?? "삭제된 자녀";
-    if (!window.confirm(`${childName}의 별 ${Number(deduction.stars)}개 차감을 취소할까요?`)) return;
+    const isGrant = deduction.adjustment_type === "grant";
+    const adjustmentName = isGrant ? "별 부여" : "별 차감";
+    if (!window.confirm(`${childName}의 ${adjustmentName} ${Number(deduction.stars)}개를 취소할까요?`)) return;
 
     button.disabled = true;
     elements.deductionMessage.hidden = true;
@@ -865,17 +957,17 @@
       try {
         await loadStarDeductions();
         await loadDeductionHistory();
-        elements.deductionMessage.textContent = `${childName}의 별 차감을 취소했습니다.`;
+        elements.deductionMessage.textContent = `${childName}의 ${adjustmentName}을 취소했습니다.`;
         elements.deductionMessage.classList.remove("is-error");
         renderDashboard();
       } catch (error) {
-        console.error("취소한 별 차감 정보를 새로고침하지 못했습니다.", error);
-        elements.deductionMessage.textContent = `차감 취소는 저장했지만 화면 갱신에 실패했습니다. 페이지를 새로고침해 주세요. ${error.message}`;
+        console.error("취소한 별 관리 정보를 새로고침하지 못했습니다.", error);
+        elements.deductionMessage.textContent = `취소는 저장했지만 화면 갱신에 실패했습니다. 페이지를 새로고침해 주세요. ${error.message}`;
         elements.deductionMessage.classList.add("is-error");
       }
     } catch (error) {
-      console.error("별 차감을 취소하지 못했습니다.", error);
-      elements.deductionMessage.textContent = `별 차감 취소에 실패했습니다. ${error.message}`;
+      console.error("별 관리 내역을 취소하지 못했습니다.", error);
+      elements.deductionMessage.textContent = `별 관리 취소에 실패했습니다. ${error.message}`;
       elements.deductionMessage.classList.add("is-error");
     } finally {
       elements.deductionMessage.hidden = false;
@@ -889,11 +981,16 @@
     const childId = elements.deductionChild.value;
     const stars = Number(elements.deductionStars.value);
     const reason = elements.deductionReason.value.trim();
+    const adjustmentType = elements.adjustmentType.value;
     const balance = getTotalStars(childId);
     if (!state.children.some((child) => child.id === childId) ||
-        !Number.isInteger(stars) || stars < 1 || stars > balance ||
+        !["deduction", "grant"].includes(adjustmentType) ||
+        !Number.isInteger(stars) || stars < 1 || stars > 99 ||
+        (adjustmentType === "deduction" && stars > balance) ||
         !reason || reason.length > 500) {
-      elements.deductionMessage.textContent = "자녀, 보유 별 이내의 차감 개수, 차감 사유를 확인해 주세요.";
+      elements.deductionMessage.textContent = adjustmentType === "grant"
+        ? "자녀, 1~99개의 부여 개수, 부여 사유를 확인해 주세요."
+        : "자녀, 보유 별 이내의 차감 개수, 차감 사유를 확인해 주세요.";
       elements.deductionMessage.classList.add("is-error");
       elements.deductionMessage.hidden = false;
       return;
@@ -901,28 +998,29 @@
     elements.deductionSubmit.disabled = true;
     elements.deductionMessage.hidden = true;
     try {
-      const { error } = await supabaseClient.rpc("admin_deduct_child_stars", {
+      const { error } = await supabaseClient.rpc("admin_adjust_child_stars", {
         p_child_id: childId,
         p_stars: stars,
         p_reason: reason,
+        p_adjustment_type: adjustmentType,
       });
       if (error) throw error;
       elements.deductionForm.reset();
       try {
         await loadStarDeductions();
         await loadDeductionHistory();
-        elements.deductionMessage.textContent = `${stars}개의 별을 차감했습니다.`;
+        elements.deductionMessage.textContent = `${stars}개의 별을 ${adjustmentType === "grant" ? "부여" : "차감"}했습니다.`;
         elements.deductionMessage.classList.remove("is-error");
       } catch (error) {
-        console.error("차감한 별 정보를 새로고침하지 못했습니다.", error);
-        elements.deductionMessage.textContent = `차감은 저장했지만 화면 갱신에 실패했습니다. 페이지를 새로고침해 주세요. ${error.message}`;
+        console.error("별 관리 정보를 새로고침하지 못했습니다.", error);
+        elements.deductionMessage.textContent = `별 관리는 저장했지만 화면 갱신에 실패했습니다. 페이지를 새로고침해 주세요. ${error.message}`;
         elements.deductionMessage.classList.add("is-error");
       }
       elements.deductionMessage.hidden = false;
       renderDashboard();
     } catch (error) {
-      console.error("자녀 별을 차감하지 못했습니다.", error);
-      elements.deductionMessage.textContent = `별 차감에 실패했습니다. ${error.message}`;
+      console.error("자녀 별을 관리하지 못했습니다.", error);
+      elements.deductionMessage.textContent = `별 관리에 실패했습니다. ${error.message}`;
       elements.deductionMessage.classList.add("is-error");
       elements.deductionMessage.hidden = false;
     } finally {
@@ -1176,6 +1274,8 @@
       ? `${applicableTasks.length}개의 할 일 중 ${doneCount}개 완료`
       : "이 날 예정된 할 일이 없어요.";
     elements.totalStars.textContent = String(getTotalStars(child.id));
+    elements.totalStars.disabled = currentView !== "child";
+    elements.totalStars.setAttribute("aria-label", `${child.name} 누적 별 ${getTotalStars(child.id)}개, 월간 내역 조회`);
     elements.weeklyStars.textContent = String(getWeeklyStars(child.id, dateString));
     const childIsAuthenticated = childSession?.childId === child.id;
     elements.childAccess.hidden = currentView !== "child";

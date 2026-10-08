@@ -82,6 +82,10 @@ button { cursor: pointer; }
 .star-total-label { color: #918b7a; font-size: 10px; white-space: nowrap; }
 .star-total-values { display: flex; align-items: baseline; gap: 5px; margin-left: auto; color: #a6a0af; font-size: 12px; }
 .star-total strong { color: #6653cc; font-size: 19px; }
+.star-total-history-button { padding: 0; border: 0; background: transparent; color: #6653cc; font-size: 19px; font-weight: 800; line-height: 1.2; }
+.star-total-history-button:disabled { cursor: default; }
+.star-total-history-button:not(:disabled):hover { text-decoration: underline; }
+.star-total-history-button:focus-visible { outline: 2px solid var(--purple); outline-offset: 2px; border-radius: 3px; }
 .star-unit { color: #8d899f; font-size: 10px; }
 .child-access { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: -7px 0 13px; padding: 10px 12px; border: 1px solid #ece9fa; border-radius: 10px; background: #fbfaff; }
 .child-access-status { margin: 0; color: #756bb2; font-size: 10px; font-weight: 600; }
@@ -199,7 +203,7 @@ button { cursor: pointer; }
 .calendar-book { overflow: hidden; padding: 4px 5px; border-left: 3px solid var(--child-color); border-radius: 4px; background: color-mix(in srgb, var(--child-color) 10%, white); color: #48465d; font-size: 9px; line-height: 1.4; overflow-wrap: anywhere; }
 .calendar-book span { font-weight: 800; }
 .calendar-no-books { color: #d0cfda; font-size: 9px; }
-.star-deduction-form { display: grid; grid-template-columns: minmax(125px, .8fr) auto minmax(105px, .55fr) minmax(160px, 1.2fr) auto; align-items: end; gap: 10px; margin-top: 20px; padding: 16px; border: 1px solid #ecebf2; border-radius: 11px; background: #fbfaff; }
+.star-deduction-form { display: grid; grid-template-columns: minmax(115px, .8fr) auto minmax(100px, .55fr) minmax(100px, .55fr) minmax(150px, 1.2fr) auto; align-items: end; gap: 10px; margin-top: 20px; padding: 16px; border: 1px solid #ecebf2; border-radius: 11px; background: #fbfaff; }
 .deduction-field { display: grid; min-width: 0; gap: 7px; color: #55546a; font-size: 10px; font-weight: 700; }
 .deduction-field .text-input { height: 38px; font-size: 11px; }
 .deduction-balance { padding-bottom: 11px; color: #77768a; font-size: 10px; white-space: nowrap; }
@@ -216,6 +220,17 @@ button { cursor: pointer; }
 .deduction-history-item strong { color: #49475e; font-size: 11px; }
 .deduction-history-item span { color: #9695a8; font-size: 9px; }
 .deduction-history-item p { margin: 6px 0 0; color: #77768a; font-size: 10px; overflow-wrap: anywhere; }
+.star-history-dialog { width: min(100% - 32px, 470px); }
+.star-history-month-controls { display: flex; align-items: center; justify-content: space-between; margin: -5px 0 16px; padding: 5px; border: 1px solid #eae9f1; border-radius: 10px; background: #fbfaff; color: #56546e; font-size: 12px; }
+.star-history-month-controls .date-nav-button { border: 1px solid #e9e8f1; background: #fff; }
+.star-history-list { display: grid; gap: 8px; max-height: 50vh; overflow-y: auto; }
+.star-history-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 7px 10px; padding: 12px; border: 1px solid #eeedf4; border-radius: 9px; }
+.star-history-item strong { font-size: 11px; }
+.star-history-item strong.is-grant { color: #38866b; }
+.star-history-item strong.is-deduction { color: #bd5e70; }
+.star-history-item span { flex: 0 0 auto; color: #9695a8; font-size: 10px; }
+.star-history-item p { grid-column: 1 / -1; margin: 0; color: #77768a; font-size: 10px; line-height: 1.6; overflow-wrap: anywhere; }
+.star-history-item.is-cancelled { background: #f8f8fa; opacity: .68; }
 
 .form-dialog { width: min(100% - 32px, 430px); max-height: min(90vh, 760px); padding: 25px; overflow-y: auto; border: 1px solid #eeedf4; border-radius: 17px; background: white; color: #29283e; box-shadow: 0 18px 60px #28234a24; }
 .form-dialog::backdrop { background: #25233d66; backdrop-filter: blur(2px); }
