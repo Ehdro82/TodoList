@@ -471,7 +471,9 @@ begin
 end;
 $$;
 
-create or replace function public.get_child_star_adjustment_history(
+drop function if exists public.get_child_star_adjustment_history(text, date, date);
+
+create function public.get_child_star_adjustment_history(
   p_child_id text,
   p_start_date date,
   p_end_date date
